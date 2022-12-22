@@ -34,9 +34,9 @@ func (m *Storage) Get(key string) (string, error) {
 	m.RLock()
 	defer m.RUnlock()
 
-	url, is_valid := m.links[key]
-	if !is_valid {
-		return "", errors.New("Key not valid.")
+	url, isValid := m.links[key]
+	if !isValid {
+		return "", errors.New("key not valid")
 	}
 
 	return url, nil
