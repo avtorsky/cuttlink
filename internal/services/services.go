@@ -1,4 +1,4 @@
-package proxy
+package services
 
 type LocalStorage interface {
 	Get(key string) (string, error)
