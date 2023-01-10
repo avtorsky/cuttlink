@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"github.com/avtorsky/cuttlink/internal/services"
 	"github.com/avtorsky/cuttlink/internal/storage"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -18,9 +17,8 @@ func SetUpRouter() *gin.Engine {
 	return router
 }
 
-func TestServer__createRedirect(t *testing.T) {
+func TestServer__createShortURLWebForm(t *testing.T) {
 	localStorage := storage.New()
-	localProxyService := services.New(localStorage)
 	tests := []struct {
 		name        string
 		method      string
@@ -46,6 +44,22 @@ func TestServer__createRedirect(t *testing.T) {
 			value:       "",
 		},
 		{
+			name:        "post_url_without_scheme_400",
+			method:      http.MethodPost,
+			contentType: "application/x-www-form-urlencoded",
+			code:        400,
+			key:         "url",
+			value:       "explorer.avtorskydeployed.online",
+		},
+		{
+			name:        "post_url_without_host_400",
+			method:      http.MethodPost,
+			contentType: "application/x-www-form-urlencoded",
+			code:        400,
+			key:         "url",
+			value:       "https://",
+		},
+		{
 			name:        "post_invalid_method_404",
 			method:      http.MethodDelete,
 			contentType: "application/x-www-form-urlencoded",
@@ -64,12 +78,12 @@ func TestServer__createRedirect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Server{service: localProxyService}
+			s := &Server{storage: localStorage}
 			r := SetUpRouter()
-			r.POST("/", s.createRedirect)
+			r.POST("/form-submit", s.createShortURLWebForm)
 			data := url.Values{}
 			data.Set(tt.key, tt.value)
-			request := httptest.NewRequest(tt.method, "/", bytes.NewBufferString(data.Encode()))
+			request := httptest.NewRequest(tt.method, "/form-submit", bytes.NewBufferString(data.Encode()))
 			request.Header.Set("Content-Type", tt.contentType)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
@@ -84,9 +98,8 @@ func TestServer__createRedirect(t *testing.T) {
 
 func TestServer__redirect(t *testing.T) {
 	localStorage := storage.New()
-	localProxyService := services.New(localStorage)
 	dst := "https://explorer.avtorskydeployed.online/"
-	testKey := localProxyService.CreateRedirect(dst)
+	testKey := localStorage.Insert(dst)
 	tests := []struct {
 		name     string
 		method   string
@@ -111,7 +124,7 @@ func TestServer__redirect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Server{service: localProxyService}
+			s := &Server{storage: localStorage}
 			r := SetUpRouter()
 			r.GET("/:keyID", s.redirect)
 			request := httptest.NewRequest(tt.method, tt.url, nil)

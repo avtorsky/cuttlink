@@ -6,38 +6,43 @@ import (
 	"sync"
 )
 
-type Storage struct {
+type Storage interface {
+	Insert(baseURL string) string
+	Get(key string) (string, error)
+}
+
+type StorageDB struct {
 	sync.RWMutex
-	links   map[string]string
+	urls    map[string]string
 	counter int
 }
 
-func New() *Storage {
-	return &Storage{
+func New() StorageDB {
+	return StorageDB{
 		counter: 1,
-		links:   map[string]string{},
+		urls:    map[string]string{},
 	}
 }
 
-func (m *Storage) Insert(url string) string {
-	m.Lock()
-	defer m.Unlock()
+func (db *StorageDB) Insert(baseURL string) string {
+	db.Lock()
+	defer db.Unlock()
 
-	m.counter++
-	key := strconv.Itoa(m.counter)
-	m.links[key] = url
+	db.counter++
+	key := strconv.Itoa(db.counter)
+	db.urls[key] = baseURL
 
 	return key
 }
 
-func (m *Storage) Get(key string) (string, error) {
-	m.RLock()
-	defer m.RUnlock()
+func (db *StorageDB) Get(key string) (string, error) {
+	db.RLock()
+	defer db.RUnlock()
 
-	url, ok := m.links[key]
+	baseURL, ok := db.urls[key]
 	if !ok {
 		return "", errors.New("key not valid")
 	}
 
-	return url, nil
+	return baseURL, nil
 }
