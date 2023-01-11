@@ -2,80 +2,107 @@ package server
 
 import (
 	"fmt"
-	"github.com/avtorsky/cuttlink/internal/services"
+	"github.com/avtorsky/cuttlink/internal/storage"
+	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
 type Server struct {
-	service  services.ProxyService
+	storage  *storage.StorageDB
 	endpoint string
 	port     int
 }
 
-func New(service services.ProxyService, endpoint string, port int) Server {
+func New(storage *storage.StorageDB, endpoint string, port int) Server {
 	return Server{
-		service:  service,
+		storage:  storage,
 		endpoint: endpoint,
 		port:     port,
 	}
 }
 
 func (s *Server) Run() {
-	http.HandleFunc("/", s.routeRedirect)
-	addr := fmt.Sprintf(":%d", s.port)
-	http.ListenAndServe(addr, nil)
+	gin.ForceConsoleColor()
+	r := gin.Default()
+	r.GET("/:keyID", s.redirect)
+	r.POST("/", s.createShortURL)
+	r.POST("/form-submit", s.createShortURLWebForm)
+	dst := fmt.Sprintf(":%d", s.port)
+	http.ListenAndServe(dst, r)
 }
 
-func (s *Server) createRedirect(rw http.ResponseWriter, r *http.Request) {
-	headerContentType := r.Header.Get("Content-Type")
-	rw.Header().Set("content-type", "text/plain")
-	var url = ""
-	if headerContentType == "application/x-www-form-urlencoded" {
-		r.ParseForm()
-		url = r.FormValue("url")
-	} else if headerContentType == "text/plain; charset=utf-8" {
-		urlBytes, err := io.ReadAll(r.Body)
+func (s *Server) createShortURL(ctx *gin.Context) {
+	headerContentType := ctx.Request.Header.Get("Content-Type")
+	ctx.Writer.Header().Set("content-type", "text/plain")
+	var baseURL string
+	if headerContentType == "text/plain; charset=utf-8" {
+		urlBytes, err := io.ReadAll(ctx.Request.Body)
 		if err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
+			ctx.String(http.StatusInternalServerError, "Invalid payload")
 			fmt.Println("Invalid payload.")
 		}
-		url = strings.TrimSuffix(string(urlBytes), "\n")
+		baseURL = strings.TrimSpace(string(urlBytes))
 	} else {
-		rw.WriteHeader(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, "Invalid Content-Type header")
 		fmt.Println("Invalid Content-Type header.")
 		return
 	}
-	if url == "" {
-		rw.WriteHeader(http.StatusBadRequest)
+	u, _ := url.Parse(baseURL)
+	if u.Scheme == "" {
+		ctx.String(http.StatusBadRequest, "Invalid URL scheme")
+		fmt.Println("Invalid URL scheme.")
+		return
+	} else if u.Host == "" {
+		ctx.String(http.StatusBadRequest, "Invalid URL host")
+		fmt.Println("Invalid URL host.")
+		return
+	}
+	key := s.storage.Insert(baseURL)
+	shortURL := fmt.Sprintf("%s/%s", s.endpoint, key)
+	ctx.String(http.StatusCreated, shortURL)
+}
+
+func (s *Server) createShortURLWebForm(ctx *gin.Context) {
+	headerContentType := ctx.Request.Header.Get("Content-Type")
+	ctx.Writer.Header().Set("content-type", "application/x-www-form-urlencoded")
+	var baseURL string
+	if headerContentType == "application/x-www-form-urlencoded" {
+		baseURL = ctx.PostForm("url")
+	} else {
+		ctx.String(http.StatusInternalServerError, "Invalid Content-Type header")
+		fmt.Println("Invalid Content-Type header.")
+		return
+	}
+	if baseURL == "" {
+		ctx.String(http.StatusBadRequest, "Invalid URL")
 		fmt.Println("Invalid URL.")
 		return
 	}
-	key := s.service.CreateRedirect(url)
-	resultLink := fmt.Sprintf("%s/%s", s.endpoint, key)
-	rw.WriteHeader(http.StatusCreated)
-	rw.Write([]byte(resultLink))
+	u, _ := url.Parse(baseURL)
+	if u.Scheme == "" {
+		ctx.String(http.StatusBadRequest, "Invalid URL scheme")
+		fmt.Println("Invalid URL scheme.")
+		return
+	} else if u.Host == "" {
+		ctx.String(http.StatusBadRequest, "Invalid URL host")
+		fmt.Println("Invalid URL host.")
+		return
+	}
+	key := s.storage.Insert(baseURL)
+	shortURL := fmt.Sprintf("%s/%s", s.endpoint, key)
+	ctx.String(http.StatusCreated, shortURL)
 }
 
-func (s *Server) redirect(rw http.ResponseWriter, r *http.Request) {
-	key := strings.TrimPrefix(r.URL.Path, "/")
-	url, err := s.service.GetLinkByKeyID(key)
+func (s *Server) redirect(ctx *gin.Context) {
+	key := ctx.Param("keyID")
+	baseURL, err := s.storage.Get(key)
 	if err != nil {
-		rw.WriteHeader(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "Invalid key")
 		fmt.Println("Invalid key", key)
 		return
 	}
-	http.Redirect(rw, r, url, http.StatusTemporaryRedirect)
-}
-
-func (s *Server) routeRedirect(rw http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		s.redirect(rw, r)
-	} else if r.Method == http.MethodPost {
-		s.createRedirect(rw, r)
-	} else {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Println("Invalid HTTP request method.")
-	}
+	ctx.Redirect(http.StatusTemporaryRedirect, baseURL)
 }
