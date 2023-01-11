@@ -11,12 +11,12 @@ import (
 )
 
 type Server struct {
-	storage  storage.StorageDB
+	storage  *storage.StorageDB
 	endpoint string
 	port     int
 }
 
-func New(storage storage.StorageDB, endpoint string, port int) Server {
+func New(storage *storage.StorageDB, endpoint string, port int) Server {
 	return Server{
 		storage:  storage,
 		endpoint: endpoint,
@@ -62,8 +62,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 	}
 	key := s.storage.Insert(baseURL)
 	shortURL := fmt.Sprintf("%s/%s", s.endpoint, key)
-	ctx.Status(http.StatusCreated)
-	ctx.Writer.Write([]byte(shortURL))
+	ctx.String(http.StatusCreated, shortURL)
 }
 
 func (s *Server) createShortURLWebForm(ctx *gin.Context) {
@@ -94,8 +93,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 	}
 	key := s.storage.Insert(baseURL)
 	shortURL := fmt.Sprintf("%s/%s", s.endpoint, key)
-	ctx.Status(http.StatusCreated)
-	ctx.Writer.Write([]byte(shortURL))
+	ctx.String(http.StatusCreated, shortURL)
 }
 
 func (s *Server) redirect(ctx *gin.Context) {

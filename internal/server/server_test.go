@@ -134,7 +134,7 @@ func TestServer__redirect(t *testing.T) {
 			if res.StatusCode != tt.code {
 				t.Errorf("Expected status code %d, got %d", tt.code, res.StatusCode)
 			}
-			if tt.code == 307 {
+			if tt.code == http.StatusTemporaryRedirect {
 				dst := res.Header.Get("location")
 				if dst != tt.location {
 					t.Errorf("Expected location %s, got %s", tt.location, dst)

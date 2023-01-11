@@ -7,7 +7,7 @@ import (
 )
 
 type Storage interface {
-	Insert(baseURL string) string
+	Insert(baseURL string) (string, error)
 	Get(key string) (string, error)
 }
 
@@ -17,8 +17,8 @@ type StorageDB struct {
 	counter int
 }
 
-func New() StorageDB {
-	return StorageDB{
+func New() *StorageDB {
+	return &StorageDB{
 		counter: 1,
 		urls:    map[string]string{},
 	}
