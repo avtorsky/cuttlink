@@ -3,13 +3,16 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"github.com/avtorsky/cuttlink/internal/config"
 	"github.com/avtorsky/cuttlink/internal/storage"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/caarlos0/env/v6"
+	"github.com/gin-gonic/gin"
 )
 
 func SetUpRouter() *gin.Engine {
@@ -98,6 +101,10 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 }
 
 func TestServer__createShortURLJSON(t *testing.T) {
+	cfg := config.Env{}
+	if err := env.Parse(&cfg); err != nil {
+		fmt.Printf("%+v\n", err)
+	}
 	localStorage := storage.New()
 	tests := []struct {
 		name        string
@@ -159,9 +166,9 @@ func TestServer__createShortURLJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Server{
-				storage: localStorage,
-				endpoint: "http://localhost:8080",
-				port: 8080,
+				storage:  localStorage,
+				endpoint: cfg.BaseURL,
+				port:     cfg.ServerPort,
 			}
 			r := SetUpRouter()
 			r.POST("/api/shorten", s.createShortURLJSON)

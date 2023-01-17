@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/avtorsky/cuttlink/internal/storage"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type PayloadJSON struct {
