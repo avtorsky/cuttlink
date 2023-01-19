@@ -1,0 +1,2 @@
+{"Key":"2","Value":"https://explorer.avtorskydeployed.online"}
+{"Key":"3","Value":"https://yatube.avtorskydeployed.online/"}

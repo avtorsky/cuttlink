@@ -14,7 +14,9 @@ func main() {
 	if err := env.Parse(&cfg); err != nil {
 		fmt.Printf("%+v\n", err)
 	}
-	localStorage := storage.New()
+	fileStorage := storage.NewFileStorage(cfg.FileStoragePath)
+	defer fileStorage.CloseFS()
+	localStorage := storage.New(fileStorage)
 	localServer := server.New(localStorage, cfg.BaseURL, cfg.ServerPort)
 
 	fmt.Printf("Server is running at %s, port %v\n", cfg.BaseURL, cfg.ServerPort)

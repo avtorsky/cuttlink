@@ -15,12 +15,18 @@ type StorageDB struct {
 	sync.RWMutex
 	urls    map[string]string
 	counter int
+	storage FileStorageSignature
 }
 
-func New() *StorageDB {
+func New(file FileStorageSignature) *StorageDB {
+	data, err := file.LoadFS()
+	if err != nil {
+		panic(err)
+	}
 	return &StorageDB{
-		counter: 1,
-		urls:    map[string]string{},
+		counter: peekIntegerFromStack(data),
+		urls:    data,
+		storage: file,
 	}
 }
 
@@ -31,6 +37,7 @@ func (db *StorageDB) Insert(baseURL string) string {
 	db.counter++
 	key := strconv.Itoa(db.counter)
 	db.urls[key] = baseURL
+	db.storage.InsertFS(key, baseURL)
 
 	return key
 }
@@ -45,4 +52,16 @@ func (db *StorageDB) Get(key string) (string, error) {
 	}
 
 	return baseURL, nil
+}
+
+func peekIntegerFromStack(data map[string]string) int {
+	peekValue := 1
+	for keyString := range data {
+		keyInteger, err := strconv.Atoi(keyString)
+		if err == nil && peekValue < keyInteger {
+			peekValue = keyInteger
+		}
+	}
+
+	return peekValue
 }
