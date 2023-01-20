@@ -17,8 +17,8 @@ func main() {
 	fileStorage := storage.NewFileStorage(cfg.FileStoragePath)
 	defer fileStorage.CloseFS()
 	localStorage := storage.New(fileStorage)
-	localServer := server.New(localStorage, cfg.BaseURL, cfg.ServerPort)
+	localServer := server.New(localStorage, cfg.ServerHost, cfg.ServiceHost)
 
-	fmt.Printf("Server is running at %s, port %v\n", cfg.BaseURL, cfg.ServerPort)
+	fmt.Println("Server is running at", cfg.ServerHost)
 	localServer.Run()
 }

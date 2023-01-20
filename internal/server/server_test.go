@@ -175,9 +175,9 @@ func TestServer__createShortURLJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Server{
-				storage:  localStorage,
-				endpoint: cfg.BaseURL,
-				port:     cfg.ServerPort,
+				storage:     localStorage,
+				serverHost:  cfg.ServerHost,
+				serviceHost: cfg.ServiceHost,
 			}
 			r := SetUpRouter()
 			r.POST("/api/shorten", s.createShortURLJSON)
