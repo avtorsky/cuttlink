@@ -6,12 +6,15 @@
 [Testing](#testing) /
 [Healthcheck](#healthcheck)
 
-[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter6)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
+[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter7)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
 
 ## About
 URL shortener service
 
 ## Changelog
+Release 20230122:
+feat(./internal/server/gzip.go): sprint2 iter8 gzip compression config
+
 Release 20230121:
 feat(./cmd/shortener/main.go): sprint2 iter7 cli flags config
 docs(./README.md): add deploy, testing && healthcheck specifications
