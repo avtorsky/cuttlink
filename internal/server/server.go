@@ -37,10 +37,12 @@ func New(storage *storage.StorageDB, serverHost string, serviceHost string) Serv
 func (s *Server) Run() {
 	gin.ForceConsoleColor()
 	r := gin.New()
-	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
-	r.Use(compressMiddleware())
-	r.Use(decompressMiddleware())
+	r.Use(
+		gin.Logger(),
+		gin.Recovery(),
+		compressMiddleware(),
+		decompressMiddleware(),
+	)
 	r.GET("/:keyID", s.redirect)
 	r.POST("/", s.createShortURL)
 	r.POST("/form-submit", s.createShortURLWebForm)
@@ -52,16 +54,11 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
 	var baseURL string
 	switch headerContentType {
-	case "application/x-gzip":
+	case "application/x-gzip", "text/plain; charset=utf-8":
 		dataBytes, err := io.ReadAll(ctx.Request.Body)
 		if err != nil {
 			ctx.String(http.StatusInternalServerError, "Invalid payload")
-		}
-		baseURL = strings.TrimSpace(string(dataBytes))
-	case "text/plain; charset=utf-8":
-		dataBytes, err := io.ReadAll(ctx.Request.Body)
-		if err != nil {
-			ctx.String(http.StatusInternalServerError, "Invalid payload")
+			return
 		}
 		baseURL = strings.TrimSpace(string(dataBytes))
 	default:
@@ -76,7 +73,11 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key := s.storage.Insert(baseURL)
+	key, err := s.storage.Insert(baseURL)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
+		return
+	}
 	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
 	ctx.Writer.Header().Set("Content-Type", "text/plain")
 	ctx.String(http.StatusCreated, shortURL)
@@ -90,6 +91,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		dataBytes, err := io.ReadAll(ctx.Request.Body)
 		if err != nil {
 			ctx.String(http.StatusInternalServerError, "Invalid payload")
+			return
 		}
 		baseURL = strings.TrimSpace(string(dataBytes))
 	case "application/x-www-form-urlencoded":
@@ -110,7 +112,11 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key := s.storage.Insert(baseURL)
+	key, err := s.storage.Insert(baseURL)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
+		return
+	}
 	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
 	ctx.Writer.Header().Set("Content-Type", "application/x-www-form-urlencoded")
 	ctx.String(http.StatusCreated, shortURL)
@@ -119,40 +125,47 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 func (s *Server) createShortURLJSON(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
 	var payload PayloadJSON
-	switch headerContentType {
-	case "application/json":
-		err := ctx.BindJSON(&payload)
-		if err != nil || payload.URL == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{
-				"message": "Invalid URL",
-			})
-			return
-		}
-	default:
+	if headerContentType != "application/json" {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Invalid Content-Type header",
 		})
 		return
 	}
-	u, _ := url.Parse(payload.URL)
-	if u.Scheme == "" {
+	if err := ctx.BindJSON(&payload); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "Invalid URL",
+		})
+		return
+	}
+	if _, err := url.ParseRequestURI(payload.URL); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": "Invalid URL scheme",
 		})
 		return
-	} else if u.Host == "" {
+	}
+	u, _ := url.Parse(payload.URL)
+	if u.Host == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": "Invalid URL host",
 		})
 		return
 	}
-	key := s.storage.Insert(payload.URL)
+	key, err := s.storage.Insert(payload.URL)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Internal server I/O error",
+		})
+		return
+	}
 	shortURL := ResponseJSON{
 		Result: fmt.Sprintf("%s/%s", s.serviceHost, key),
 	}
 	ctx.Writer.Header().Set("Content-Type", "application/json")
 	ctx.JSON(http.StatusCreated, shortURL)
-	result, _ := json.Marshal(shortURL)
+	result, err := json.Marshal(shortURL)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(string(result))
 }
 

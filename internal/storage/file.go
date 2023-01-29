@@ -9,12 +9,6 @@ import (
 
 const bufMaxBytes = 1024
 
-type FileStorageSignature interface {
-	LoadFS() (map[string]string, error)
-	InsertFS(key string, value string) error
-	CloseFS() error
-}
-
 type FileStorage struct {
 	file     *os.File
 	filename string

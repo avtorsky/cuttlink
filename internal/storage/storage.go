@@ -7,18 +7,19 @@ import (
 )
 
 type Storage interface {
-	Insert(baseURL string) (string, error)
-	Get(key string) (string, error)
+	LoadFS() (map[string]string, error)
+	InsertFS(key string, value string) error
+	CloseFS() error
 }
 
 type StorageDB struct {
 	sync.RWMutex
 	urls    map[string]string
 	counter int
-	storage FileStorageSignature
+	storage Storage
 }
 
-func New(file FileStorageSignature) *StorageDB {
+func New(file Storage) *StorageDB {
 	data, err := file.LoadFS()
 	if err != nil {
 		panic(err)
@@ -30,16 +31,18 @@ func New(file FileStorageSignature) *StorageDB {
 	}
 }
 
-func (db *StorageDB) Insert(baseURL string) string {
+func (db *StorageDB) Insert(baseURL string) (string, error) {
 	db.Lock()
 	defer db.Unlock()
 
 	db.counter++
 	key := strconv.Itoa(db.counter)
 	db.urls[key] = baseURL
-	db.storage.InsertFS(key, baseURL)
+	if err := db.storage.InsertFS(key, baseURL); err != nil {
+		return "", err
+	}
 
-	return key
+	return key, nil
 }
 
 func (db *StorageDB) Get(key string) (string, error) {
