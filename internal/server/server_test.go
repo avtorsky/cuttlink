@@ -26,9 +26,9 @@ func SetUpRouter() *gin.Engine {
 
 func TestServer__createShortURLWebForm(t *testing.T) {
 	os.Remove(filename)
-	testFileStorage := storage.NewFileStorage(filename)
+	testFileStorage, _ := storage.NewFileStorage(filename)
 	defer testFileStorage.CloseFS()
-	localStorage := storage.New(testFileStorage)
+	localStorage, _ := storage.New(testFileStorage)
 	tests := []struct {
 		name        string
 		method      string
@@ -115,9 +115,9 @@ func TestServer__createShortURLJSON(t *testing.T) {
 	if err := env.Parse(&cfg); err != nil {
 		fmt.Printf("%+v\n", err)
 	}
-	testFileStorage := storage.NewFileStorage(filename)
+	testFileStorage, _ := storage.NewFileStorage(filename)
 	defer testFileStorage.CloseFS()
-	localStorage := storage.New(testFileStorage)
+	localStorage, _ := storage.New(testFileStorage)
 	tests := []struct {
 		name        string
 		method      string
@@ -206,8 +206,8 @@ func TestServer__createShortURLJSON(t *testing.T) {
 
 func TestServer__redirect(t *testing.T) {
 	os.Remove(filename)
-	testFileStorage := storage.NewFileStorage(filename)
-	localStorage := storage.New(testFileStorage)
+	testFileStorage, _ := storage.NewFileStorage(filename)
+	localStorage, _ := storage.New(testFileStorage)
 	baseURL := "https://explorer.avtorskydeployed.online/"
 	key, _ := localStorage.Insert(baseURL)
 	tests := []struct {

@@ -26,12 +26,38 @@ type Server struct {
 	serviceHost string
 }
 
-func New(storage *storage.StorageDB, serverHost string, serviceHost string) Server {
-	return Server{
-		storage:     storage,
-		serverHost:  serverHost,
-		serviceHost: serviceHost,
+type ServerOption func(*Server) error
+
+func WithServerHost(address string) ServerOption {
+	return func(s *Server) error {
+		s.serverHost = address
+		return nil
 	}
+}
+
+func WithServiceHost(bURL string) ServerOption {
+	return func(s *Server) error {
+		s.serviceHost = bURL
+		return nil
+	}
+}
+
+func New(storage *storage.StorageDB, opts ...ServerOption) (Server, error) {
+	const (
+		defaultserverHost  = ":8080"
+		defaultserviceHost = "http://localhost:8080"
+	)
+	srv := Server{
+		storage:     storage,
+		serverHost:  defaultserverHost,
+		serviceHost: defaultserviceHost,
+	}
+	for _, opt := range opts {
+		if err := opt(&srv); err != nil {
+			return Server{}, err
+		}
+	}
+	return srv, nil
 }
 
 func (s *Server) Run() {

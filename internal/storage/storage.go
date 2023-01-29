@@ -19,16 +19,16 @@ type StorageDB struct {
 	storage Storage
 }
 
-func New(file Storage) *StorageDB {
-	data, err := file.LoadFS()
+func New(s Storage) (*StorageDB, error) {
+	data, err := s.LoadFS()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	return &StorageDB{
 		counter: peekIntegerFromStack(data),
 		urls:    data,
-		storage: file,
-	}
+		storage: s,
+	}, nil
 }
 
 func (db *StorageDB) Insert(baseURL string) (string, error) {
