@@ -26,9 +26,9 @@ func SetUpRouter() *gin.Engine {
 
 func TestServer__createShortURLWebForm(t *testing.T) {
 	os.Remove(filename)
-	testFileStorage := storage.NewFileStorage(filename)
+	testFileStorage, _ := storage.NewFileStorage(filename)
 	defer testFileStorage.CloseFS()
-	localStorage := storage.New(testFileStorage)
+	localStorage, _ := storage.New(testFileStorage)
 	tests := []struct {
 		name        string
 		method      string
@@ -108,13 +108,16 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 
 func TestServer__createShortURLJSON(t *testing.T) {
 	os.Remove(filename)
+	os.Setenv("SERVER_ADDRESS", ":8080")
+	os.Setenv("BASE_URL", "http://localhost:8080")
+	os.Setenv("FILE_STORAGE_PATH", "kvstore.txt")
 	cfg := config.Env{}
 	if err := env.Parse(&cfg); err != nil {
 		fmt.Printf("%+v\n", err)
 	}
-	testFileStorage := storage.NewFileStorage(filename)
+	testFileStorage, _ := storage.NewFileStorage(filename)
 	defer testFileStorage.CloseFS()
-	localStorage := storage.New(testFileStorage)
+	localStorage, _ := storage.New(testFileStorage)
 	tests := []struct {
 		name        string
 		method      string
@@ -203,29 +206,29 @@ func TestServer__createShortURLJSON(t *testing.T) {
 
 func TestServer__redirect(t *testing.T) {
 	os.Remove(filename)
-	testFileStorage := storage.NewFileStorage(filename)
-	localStorage := storage.New(testFileStorage)
-	dst := "https://explorer.avtorskydeployed.online/"
-	testKey := localStorage.Insert(dst)
+	testFileStorage, _ := storage.NewFileStorage(filename)
+	localStorage, _ := storage.New(testFileStorage)
+	baseURL := "https://explorer.avtorskydeployed.online/"
+	key, _ := localStorage.Insert(baseURL)
 	tests := []struct {
 		name     string
 		method   string
 		code     int
-		url      string
+		shortURL string
 		location string
 	}{
 		{
 			name:     "get_ok_307",
 			method:   http.MethodGet,
 			code:     307,
-			url:      fmt.Sprintf("/%s", testKey),
-			location: dst,
+			shortURL: fmt.Sprintf("/%s", key),
+			location: baseURL,
 		},
 		{
 			name:     "get_invalid_key_400",
 			method:   http.MethodGet,
 			code:     400,
-			url:      "/ID",
+			shortURL: "/ID",
 			location: "",
 		},
 	}
@@ -234,7 +237,7 @@ func TestServer__redirect(t *testing.T) {
 			s := &Server{storage: localStorage}
 			r := SetUpRouter()
 			r.GET("/:keyID", s.redirect)
-			request := httptest.NewRequest(tt.method, tt.url, nil)
+			request := httptest.NewRequest(tt.method, tt.shortURL, nil)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
 			res := w.Result()
@@ -242,9 +245,9 @@ func TestServer__redirect(t *testing.T) {
 				t.Errorf("Expected status code %d, got %d", tt.code, res.StatusCode)
 			}
 			if tt.code == http.StatusTemporaryRedirect {
-				dst := res.Header.Get("location")
-				if dst != tt.location {
-					t.Errorf("Expected location %s, got %s", tt.location, dst)
+				loc := res.Header.Get("location")
+				if loc != tt.location {
+					t.Errorf("Expected location %s, got %s", tt.location, loc)
 				}
 			}
 			defer res.Body.Close()

@@ -26,17 +26,49 @@ type Server struct {
 	serviceHost string
 }
 
-func New(storage *storage.StorageDB, serverHost string, serviceHost string) Server {
-	return Server{
-		storage:     storage,
-		serverHost:  serverHost,
-		serviceHost: serviceHost,
+type ServerOption func(*Server) error
+
+func WithServerHost(address string) ServerOption {
+	return func(s *Server) error {
+		s.serverHost = address
+		return nil
 	}
+}
+
+func WithServiceHost(bURL string) ServerOption {
+	return func(s *Server) error {
+		s.serviceHost = bURL
+		return nil
+	}
+}
+
+func New(storage *storage.StorageDB, opts ...ServerOption) (Server, error) {
+	const (
+		defaultserverHost  = ":8080"
+		defaultserviceHost = "http://localhost:8080"
+	)
+	srv := Server{
+		storage:     storage,
+		serverHost:  defaultserverHost,
+		serviceHost: defaultserviceHost,
+	}
+	for _, opt := range opts {
+		if err := opt(&srv); err != nil {
+			return Server{}, err
+		}
+	}
+	return srv, nil
 }
 
 func (s *Server) Run() {
 	gin.ForceConsoleColor()
-	r := gin.Default()
+	r := gin.New()
+	r.Use(
+		gin.Logger(),
+		gin.Recovery(),
+		compressMiddleware(),
+		decompressMiddleware(),
+	)
 	r.GET("/:keyID", s.redirect)
 	r.POST("/", s.createShortURL)
 	r.POST("/form-submit", s.createShortURLWebForm)
@@ -46,15 +78,16 @@ func (s *Server) Run() {
 
 func (s *Server) createShortURL(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
-	ctx.Writer.Header().Set("content-type", "text/plain")
 	var baseURL string
-	if headerContentType == "text/plain; charset=utf-8" {
+	switch headerContentType {
+	case "application/x-gzip", "text/plain; charset=utf-8":
 		dataBytes, err := io.ReadAll(ctx.Request.Body)
 		if err != nil {
 			ctx.String(http.StatusInternalServerError, "Invalid payload")
+			return
 		}
 		baseURL = strings.TrimSpace(string(dataBytes))
-	} else {
+	default:
 		ctx.String(http.StatusInternalServerError, "Invalid Content-Type header")
 		return
 	}
@@ -66,18 +99,30 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key := s.storage.Insert(baseURL)
+	key, err := s.storage.Insert(baseURL)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
+		return
+	}
 	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
+	ctx.Writer.Header().Set("Content-Type", "text/plain")
 	ctx.String(http.StatusCreated, shortURL)
 }
 
 func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
-	ctx.Writer.Header().Set("content-type", "application/x-www-form-urlencoded")
 	var baseURL string
-	if headerContentType == "application/x-www-form-urlencoded" {
+	switch headerContentType {
+	case "application/x-gzip":
+		dataBytes, err := io.ReadAll(ctx.Request.Body)
+		if err != nil {
+			ctx.String(http.StatusInternalServerError, "Invalid payload")
+			return
+		}
+		baseURL = strings.TrimSpace(string(dataBytes))
+	case "application/x-www-form-urlencoded":
 		baseURL = ctx.PostForm("url")
-	} else {
+	default:
 		ctx.String(http.StatusInternalServerError, "Invalid Content-Type header")
 		return
 	}
@@ -93,47 +138,60 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key := s.storage.Insert(baseURL)
+	key, err := s.storage.Insert(baseURL)
+	if err != nil {
+		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
+		return
+	}
 	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
+	ctx.Writer.Header().Set("Content-Type", "application/x-www-form-urlencoded")
 	ctx.String(http.StatusCreated, shortURL)
 }
 
 func (s *Server) createShortURLJSON(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
-	ctx.Writer.Header().Set("content-type", "application/json")
 	var payload PayloadJSON
-	if headerContentType == "application/json" {
-		err := ctx.BindJSON(&payload)
-		if err != nil || payload.URL == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{
-				"message": "Invalid URL",
-			})
-			return
-		}
-	} else {
+	if headerContentType != "application/json" {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Invalid Content-Type header",
 		})
 		return
 	}
-	u, _ := url.Parse(payload.URL)
-	if u.Scheme == "" {
+	if err := ctx.BindJSON(&payload); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "Invalid URL",
+		})
+		return
+	}
+	if _, err := url.ParseRequestURI(payload.URL); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": "Invalid URL scheme",
 		})
 		return
-	} else if u.Host == "" {
+	}
+	u, _ := url.Parse(payload.URL)
+	if u.Host == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"message": "Invalid URL host",
 		})
 		return
 	}
-	key := s.storage.Insert(payload.URL)
+	key, err := s.storage.Insert(payload.URL)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Internal server I/O error",
+		})
+		return
+	}
 	shortURL := ResponseJSON{
 		Result: fmt.Sprintf("%s/%s", s.serviceHost, key),
 	}
+	ctx.Writer.Header().Set("Content-Type", "application/json")
 	ctx.JSON(http.StatusCreated, shortURL)
-	result, _ := json.Marshal(shortURL)
+	result, err := json.Marshal(shortURL)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(string(result))
 }
 

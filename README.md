@@ -6,25 +6,28 @@
 [Testing](#testing) /
 [Healthcheck](#healthcheck)
 
-[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter6)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
+[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter7)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
 
 ## About
 URL shortener service
 
 ## Changelog
+Release 20230122:
+* feat(./internal/server/gzip.go): sprint2 iter8 gzip compression config
+
 Release 20230121:
-feat(./cmd/shortener/main.go): sprint2 iter7 cli flags config
-docs(./README.md): add deploy, testing && healthcheck specifications
+* feat(./cmd/shortener/main.go): sprint2 iter7 cli flags config
+* docs(./README.md): add deploy, testing && healthcheck specifications
 
 Release 20230119:
-feat(./internal/config): sprint2 iter6 file storage config
+* feat(./internal/config): sprint2 iter6 file storage config
 
 Release 20230117:
-feat(./internal/config): sprint2 iter5 env config
+* feat(./internal/config): sprint2 iter5 env config
 
 Release 20230116:
-feat(./internal/server): sprint2 iter4 /api/shorten endpoint serialization setup && unit tests coverage
-test(./internal/server): /api/shorten endpoint unit tests coverage
+* feat(./internal/server): sprint2 iter4 /api/shorten endpoint serialization setup && unit tests coverage
+* test(./internal/server): /api/shorten endpoint unit tests coverage
 
 Release 20221224:
 * refactor(./internal/server): iter3 add Gin framework for routing && cover with unit tests

@@ -3,17 +3,10 @@ package storage
 import (
 	"bufio"
 	"encoding/json"
-	"log"
 	"os"
 )
 
 const bufMaxBytes = 1024
-
-type FileStorageSignature interface {
-	LoadFS() (map[string]string, error)
-	InsertFS(key string, value string) error
-	CloseFS() error
-}
 
 type FileStorage struct {
 	file     *os.File
@@ -25,16 +18,16 @@ type Row struct {
 	Value string
 }
 
-func NewFileStorage(filename string) *FileStorage {
+func NewFileStorage(filename string) (*FileStorage, error) {
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &FileStorage{
 		file:     file,
 		filename: filename,
-	}
+	}, nil
 }
 
 func (fs *FileStorage) CloseFS() error {
@@ -61,11 +54,11 @@ func (fs *FileStorage) LoadFS() (map[string]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	if err := file.Close(); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	return data, nil
