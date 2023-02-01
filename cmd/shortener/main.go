@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/avtorsky/cuttlink/internal/config"
 	"github.com/avtorsky/cuttlink/internal/server"
@@ -14,11 +15,17 @@ func main() {
 	if err := env.Parse(&cfg); err != nil {
 		fmt.Printf("%+v\n", err)
 	}
-	fileStorage := storage.NewFileStorage(cfg.FileStoragePath)
+
+	serverHost := flag.String("a", cfg.ServerHost, "define server address")
+	serviceHost := flag.String("b", cfg.ServiceHost, "define base URL")
+	fileStoragePath := flag.String("f", cfg.FileStoragePath, "define file storage path")
+	flag.Parse()
+
+	fileStorage := storage.NewFileStorage(*fileStoragePath)
 	defer fileStorage.CloseFS()
 	localStorage := storage.New(fileStorage)
-	localServer := server.New(localStorage, cfg.ServerHost, cfg.ServiceHost)
+	localServer := server.New(localStorage, *serverHost, *serviceHost)
 
-	fmt.Println("Server is running at", cfg.ServerHost)
+	fmt.Println("Server is running at", *serverHost)
 	localServer.Run()
 }
