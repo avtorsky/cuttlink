@@ -9,6 +9,9 @@
 URL shortener service
 
 ## Changelog
+Release 20230119:
+feat(./internal/config): sprint2 iter6 file storage config
+
 Release 20230117:
 feat(./internal/config): sprint2 iter5 env config
 

@@ -21,16 +21,16 @@ type ResponseJSON struct {
 }
 
 type Server struct {
-	storage  *storage.StorageDB
-	endpoint string
-	port     int
+	storage     *storage.StorageDB
+	serverHost  string
+	serviceHost string
 }
 
-func New(storage *storage.StorageDB, endpoint string, port int) Server {
+func New(storage *storage.StorageDB, serverHost string, serviceHost string) Server {
 	return Server{
-		storage:  storage,
-		endpoint: endpoint,
-		port:     port,
+		storage:     storage,
+		serverHost:  serverHost,
+		serviceHost: serviceHost,
 	}
 }
 
@@ -41,8 +41,7 @@ func (s *Server) Run() {
 	r.POST("/", s.createShortURL)
 	r.POST("/form-submit", s.createShortURLWebForm)
 	r.POST("/api/shorten", s.createShortURLJSON)
-	dst := fmt.Sprintf(":%d", s.port)
-	http.ListenAndServe(dst, r)
+	http.ListenAndServe(s.serverHost, r)
 }
 
 func (s *Server) createShortURL(ctx *gin.Context) {
@@ -68,7 +67,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		return
 	}
 	key := s.storage.Insert(baseURL)
-	shortURL := fmt.Sprintf("%s/%s", s.endpoint, key)
+	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
 	ctx.String(http.StatusCreated, shortURL)
 }
 
@@ -95,7 +94,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		return
 	}
 	key := s.storage.Insert(baseURL)
-	shortURL := fmt.Sprintf("%s/%s", s.endpoint, key)
+	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
 	ctx.String(http.StatusCreated, shortURL)
 }
 
@@ -131,7 +130,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 	}
 	key := s.storage.Insert(payload.URL)
 	shortURL := ResponseJSON{
-		Result: fmt.Sprintf("%s/%s", s.endpoint, key),
+		Result: fmt.Sprintf("%s/%s", s.serviceHost, key),
 	}
 	ctx.JSON(http.StatusCreated, shortURL)
 	result, _ := json.Marshal(shortURL)

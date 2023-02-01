@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/caarlos0/env/v6"
 	"github.com/gin-gonic/gin"
 )
+
+const filename = "/tmp/cuttlink-test.txt"
 
 func SetUpRouter() *gin.Engine {
 	gin.ForceConsoleColor()
@@ -22,7 +25,10 @@ func SetUpRouter() *gin.Engine {
 }
 
 func TestServer__createShortURLWebForm(t *testing.T) {
-	localStorage := storage.New()
+	os.Remove(filename)
+	testFileStorage := storage.NewFileStorage(filename)
+	defer testFileStorage.CloseFS()
+	localStorage := storage.New(testFileStorage)
 	tests := []struct {
 		name        string
 		method      string
@@ -101,11 +107,14 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 }
 
 func TestServer__createShortURLJSON(t *testing.T) {
+	os.Remove(filename)
 	cfg := config.Env{}
 	if err := env.Parse(&cfg); err != nil {
 		fmt.Printf("%+v\n", err)
 	}
-	localStorage := storage.New()
+	testFileStorage := storage.NewFileStorage(filename)
+	defer testFileStorage.CloseFS()
+	localStorage := storage.New(testFileStorage)
 	tests := []struct {
 		name        string
 		method      string
@@ -166,9 +175,9 @@ func TestServer__createShortURLJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Server{
-				storage:  localStorage,
-				endpoint: cfg.BaseURL,
-				port:     cfg.ServerPort,
+				storage:     localStorage,
+				serverHost:  cfg.ServerHost,
+				serviceHost: cfg.ServiceHost,
 			}
 			r := SetUpRouter()
 			r.POST("/api/shorten", s.createShortURLJSON)
@@ -193,7 +202,9 @@ func TestServer__createShortURLJSON(t *testing.T) {
 }
 
 func TestServer__redirect(t *testing.T) {
-	localStorage := storage.New()
+	os.Remove(filename)
+	testFileStorage := storage.NewFileStorage(filename)
+	localStorage := storage.New(testFileStorage)
 	dst := "https://explorer.avtorskydeployed.online/"
 	testKey := localStorage.Insert(dst)
 	tests := []struct {
@@ -239,4 +250,5 @@ func TestServer__redirect(t *testing.T) {
 			defer res.Body.Close()
 		})
 	}
+	testFileStorage.CloseFS()
 }
