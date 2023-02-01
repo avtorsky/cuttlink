@@ -9,6 +9,9 @@
 URL shortener service
 
 ## Changelog
+Release 20230117:
+feat(./internal/config): sprint2 iter5 env config
+
 Release 20230116:
 feat(./internal/server): sprint2 iter4 /api/shorten endpoint serialization setup && unit tests coverage
 test(./internal/server): /api/shorten endpoint unit tests coverage
