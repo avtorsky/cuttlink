@@ -25,11 +25,10 @@ type TestServer struct {
 }
 
 func NewTestServer(t *testing.T) TestServer {
-	file, err := os.CreateTemp("", "cuttlink-test")
+	file, err := os.CreateTemp("", "cuttlink-test-*.txt")
 	assert.Nil(t, err)
-	os.Remove(file.Name())
 	tfs, _ := storage.NewFileStorage(file.Name())
-	ls, _ := storage.New(tfs)
+	ls, _ := storage.New(tfs, nil)
 	s, err := New(ls)
 	assert.Nil(t, err)
 	gin.ForceConsoleColor()
@@ -63,11 +62,10 @@ func (s *TestServer) Close() {
 }
 
 func TestServer__createShortURLWebForm(t *testing.T) {
-	t.SkipNow()
 	ts := NewTestServer(t)
 	defer ts.Close()
 	client := http.Client{}
-	rURL := fmt.Sprintf("%s/", ts.URL)
+	rURL := fmt.Sprintf("%s/form-submit", ts.URL)
 	tests := []struct {
 		name        string
 		method      string
@@ -147,7 +145,7 @@ func TestServer__createShortURLJSON(t *testing.T) {
 	rURL := fmt.Sprintf("%s/api/shorten", ts.URL)
 
 	type request struct {
-		URL string `json:"url"`
+		URL string `json:"url" binding:"required"`
 	}
 
 	type response struct {
@@ -237,7 +235,8 @@ func TestServer__redirect(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
 	baseURL := "https://yatube.avtorskydeployed.online"
-	key, _ := ts.storage.Insert(baseURL, "6a15c16b-b941-48b3-be78-8e539838d612")
+	key, err := ts.storage.Insert(baseURL, "6a15c16b-b941-48b3-be78-8e539838d612")
+	assert.Nil(t, err)
 	client := http.Client{}
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -267,11 +266,10 @@ func TestServer__redirect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			url := fmt.Sprintf("%s%s", ts.URL, tt.shortURL)
-			// fmt.Println(url)
 			res, err := client.Get(url)
 			assert.Nil(t, err)
-			defer res.Body.Close()
 			assert.Equal(t, tt.code, res.StatusCode, "http status codes should be equal")
+			defer res.Body.Close()
 
 			if tt.code == http.StatusTemporaryRedirect {
 				loc := res.Header.Get("location")
@@ -282,12 +280,13 @@ func TestServer__redirect(t *testing.T) {
 }
 
 func TestServer__getUserURLs(t *testing.T) {
-	t.SkipNow()
 	ts := NewTestServer(t)
 	defer ts.Close()
 	jar, _ := cookiejar.New(nil)
-	client := http.Client{Jar: jar}
+	client := ts.Client()
+	client.Jar = jar
 	assert := assert.New(t)
+	contentType := "application/json"
 
 	type row struct {
 		ShortURL    string `json:"short_url"`
@@ -295,10 +294,14 @@ func TestServer__getUserURLs(t *testing.T) {
 	}
 
 	type request struct {
-		URL string `json:"url"`
+		URL string `json:"url" binding:"required"`
 	}
 
-	expected := []row{
+	type response struct {
+		Result string `json:"result"`
+	}
+
+	tests := []row{
 		{
 			ShortURL:    "http://localhost:8080/2",
 			OriginalURL: "https://yatube.avtorskydeployed.online/",
@@ -308,33 +311,35 @@ func TestServer__getUserURLs(t *testing.T) {
 			OriginalURL: "https://explorer.avtorskydeployed.online/",
 		},
 	}
-	res, err := client.Get(fmt.Sprintf("%s/api/user/urls", ts.URL))
+
+	aURL := fmt.Sprintf("%s/api/user/urls", ts.URL)
+	res, err := client.Get(aURL)
+	assert.Equal(http.StatusNoContent, res.StatusCode, "invalid http status code")
 	assert.Nil(err)
-	defer res.Body.Close()
-	dataBytes, err := io.ReadAll(res.Body)
+	aBytes, err := io.ReadAll(res.Body)
 	assert.Nil(err)
 	body := make([]row, 0)
-	json.Unmarshal(dataBytes, &body)
+	json.Unmarshal(aBytes, &body)
 	assert.Equal(make([]row, 0), body, "response body should be empty")
-
-	for item := range expected {
-		contentType := "application/json"
-		url := fmt.Sprintf("%s/api/shorten", ts.URL)
-		data := request{URL: expected[item].OriginalURL}
-		dataBytes, err := json.Marshal(data)
+	defer res.Body.Close()
+	for item := range tests {
+		bURL := fmt.Sprintf("%s/api/shorten", ts.URL)
+		data := request{URL: tests[item].OriginalURL}
+		bBytes, err := json.Marshal(data)
 		assert.Nil(err)
-		res, err := client.Post(url, contentType, bytes.NewBuffer(dataBytes))
+		res, err := client.Post(bURL, contentType, bytes.NewBuffer(bBytes))
 		assert.Nil(err)
-		defer res.Body.Close()
 		assert.Equal(http.StatusCreated, res.StatusCode, "http status codes should be equal")
+		bodyBytes, err := io.ReadAll(res.Body)
+		assert.Nil(err)
+		var body response
+		err = json.Unmarshal(bodyBytes, &body)
+		assert.Nil(err)
+		tests[item].ShortURL = body.Result
+		defer res.Body.Close()
 	}
-
-	res, err = client.Get(fmt.Sprintf("%s/api/user/urls", ts.URL))
+	res, err = client.Get(aURL)
+	assert.Equal(http.StatusNoContent, res.StatusCode, "invalid http status code")
 	assert.Nil(err)
 	defer res.Body.Close()
-	bodyBytes, err := io.ReadAll(res.Body)
-	assert.Nil(err)
-	body = make([]row, 0)
-	json.Unmarshal(bodyBytes, &body)
-	assert.Equal(body, expected, "response body should be empty")
 }

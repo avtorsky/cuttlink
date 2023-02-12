@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"strconv"
 	"sync"
@@ -17,9 +19,10 @@ type StorageDB struct {
 	urls    map[string]Row
 	counter int
 	storage Storage
+	dsn     *sql.DB
 }
 
-func New(s Storage) (*StorageDB, error) {
+func New(s Storage, db *sql.DB) (*StorageDB, error) {
 	data, err := s.LoadFS()
 	if err != nil {
 		return nil, err
@@ -32,7 +35,12 @@ func New(s Storage) (*StorageDB, error) {
 		counter: peekIntegerFromStack(data),
 		urls:    dataMap,
 		storage: s,
+		dsn:     db,
 	}, nil
+}
+
+func (db *StorageDB) Ping(ctx context.Context) error {
+	return db.dsn.PingContext(ctx)
 }
 
 func (db *StorageDB) Insert(baseURL string, sessionID string) (string, error) {

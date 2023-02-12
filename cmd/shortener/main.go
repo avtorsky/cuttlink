@@ -1,10 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"database/sql"
 	"github.com/avtorsky/cuttlink/internal/config"
 	"github.com/avtorsky/cuttlink/internal/server"
 	"github.com/avtorsky/cuttlink/internal/storage"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
@@ -17,7 +19,12 @@ func main() {
 		panic(err)
 	}
 	defer fileStorage.CloseFS()
-	localStorage, err := storage.New(fileStorage)
+	db, err := sql.Open("pgx", cfg.DatabaseDSN)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	localStorage, err := storage.New(fileStorage, db)
 	if err != nil {
 		panic(err)
 	}
@@ -29,7 +36,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Println("Server is running at", cfg.ServerHost)
-	localServer.Run()
+	localServer.ListenAndServe()
 }

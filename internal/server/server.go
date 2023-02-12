@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,15 +21,17 @@ type ResponseJSON struct {
 	Result string `json:"result"`
 }
 
-type respPair struct {
+type URLPair struct {
 	OriginalURL string `json:"original_url"`
 	ShortURL    string `json:"short_url"`
 }
 
 type Server struct {
+	srv         *http.Server
 	storage     *storage.StorageDB
 	serverHost  string
 	serviceHost string
+	pingTimeout time.Duration
 }
 
 type ServerOption func(*Server) error
@@ -49,23 +52,22 @@ func WithServiceHost(bURL string) ServerOption {
 
 func New(storage *storage.StorageDB, opts ...ServerOption) (Server, error) {
 	const (
-		defaultserverHost  = ":8080"
-		defaultserviceHost = "http://localhost:8080"
+		defaultServerHost  = ":8080"
+		defaultServiceHost = "http://localhost:8080"
+		defaultPingTimeout = 1000 * time.Millisecond
 	)
-	srv := Server{
+	s := Server{
+		srv:         nil,
 		storage:     storage,
-		serverHost:  defaultserverHost,
-		serviceHost: defaultserviceHost,
+		serverHost:  defaultServerHost,
+		serviceHost: defaultServiceHost,
+		pingTimeout: 500 * time.Millisecond,
 	}
 	for _, opt := range opts {
-		if err := opt(&srv); err != nil {
+		if err := opt(&s); err != nil {
 			return Server{}, err
 		}
 	}
-	return srv, nil
-}
-
-func (s *Server) Run() {
 	gin.ForceConsoleColor()
 	r := gin.New()
 	r.Use(
@@ -80,7 +82,17 @@ func (s *Server) Run() {
 	r.POST("/form-submit", s.createShortURLWebForm)
 	r.POST("/api/shorten", s.createShortURLJSON)
 	r.GET("/api/user/urls", s.getUserURLs)
-	http.ListenAndServe(s.serverHost, r)
+	r.GET("/ping", s.pingDSN)
+	srv := http.Server{
+		Addr:    s.serverHost,
+		Handler: r,
+	}
+	s.srv = &srv
+	return s, nil
+}
+
+func (s *Server) ListenAndServe() {
+	s.srv.ListenAndServe()
 }
 
 func (s *Server) createShortURL(ctx *gin.Context) {
@@ -230,20 +242,30 @@ func (s *Server) getUserURLs(ctx *gin.Context) {
 		return
 	}
 	urlMap, err := s.storage.GetUserURLs(sessionID)
-	result := make([]respPair, len(urlMap))
+	result := make([]URLPair, len(urlMap))
 	if len(result) < 1 || err != nil {
 		ctx.JSON(http.StatusNoContent, result)
 		return
 	}
 	item := 0
 	for key, url := range urlMap {
-		result[item] = respPair{
+		result[item] = URLPair{
 			OriginalURL: url,
 			ShortURL:    fmt.Sprintf("%s/%s", s.serviceHost, key),
 		}
 		item++
 	}
-	fmt.Println(result)
 	ctx.Writer.Header().Set("Content-Type", "application/json")
 	ctx.JSON(http.StatusOK, result)
+}
+
+func (s *Server) pingDSN(ctx *gin.Context) {
+	ctx.Writer.Header().Set("Content-Type", "text/plain")
+	time.Sleep(s.pingTimeout)
+	ping := s.storage.Ping(ctx)
+	if ping != nil {
+		ctx.String(http.StatusOK, "OK")
+		return
+	}
+	ctx.String(http.StatusInternalServerError, "DSN out of service timeout")
 }
