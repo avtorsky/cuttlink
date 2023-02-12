@@ -283,8 +283,9 @@ func TestServer__getUserURLs(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
 	jar, _ := cookiejar.New(nil)
-	client := ts.Client()
-	client.Jar = jar
+	client := http.Client{
+		Jar: jar,
+	}
 	assert := assert.New(t)
 	contentType := "application/json"
 
@@ -322,6 +323,7 @@ func TestServer__getUserURLs(t *testing.T) {
 	json.Unmarshal(aBytes, &body)
 	assert.Equal(make([]row, 0), body, "response body should be empty")
 	defer res.Body.Close()
+
 	for item := range tests {
 		bURL := fmt.Sprintf("%s/api/shorten", ts.URL)
 		data := request{URL: tests[item].OriginalURL}
@@ -338,6 +340,7 @@ func TestServer__getUserURLs(t *testing.T) {
 		tests[item].ShortURL = body.Result
 		defer res.Body.Close()
 	}
+
 	res, err = client.Get(aURL)
 	assert.Equal(http.StatusNoContent, res.StatusCode, "invalid http status code")
 	assert.Nil(err)

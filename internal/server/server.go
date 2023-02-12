@@ -264,8 +264,8 @@ func (s *Server) pingDSN(ctx *gin.Context) {
 	time.Sleep(s.pingTimeout)
 	ping := s.storage.Ping(ctx)
 	if ping != nil {
-		ctx.String(http.StatusOK, "OK")
+		ctx.String(http.StatusInternalServerError, "DSN out of service timeout")
 		return
 	}
-	ctx.String(http.StatusInternalServerError, "DSN out of service timeout")
+	ctx.String(http.StatusOK, "OK")
 }
