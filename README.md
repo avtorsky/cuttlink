@@ -75,6 +75,9 @@ Location: https://explorer.avtorskydeployed.online/
 
 ## Changelog
 
+Release 20230214:
+* feat(./internal/storage): sprint3 iter11 DSN migration to PostgreSQL with fallback option
+
 Release 20230205:
 * feat(./internal/server): sprint3 iter10 DSN connection config && /ping healthcheck endpoint setup
 * build(./docker-compose.yml): PostgreSQL image config

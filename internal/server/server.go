@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/avtorsky/cuttlink/internal/storage"
@@ -77,7 +78,7 @@ func New(storage *storage.StorageDB, opts ...ServerOption) (Server, error) {
 		decompressMiddleware(),
 		cookieAuthentication(),
 	)
-	r.GET("/:keyID", s.redirect)
+	r.GET("/:id", s.redirect)
 	r.POST("/", s.createShortURL)
 	r.POST("/form-submit", s.createShortURLWebForm)
 	r.POST("/api/shorten", s.createShortURLJSON)
@@ -122,7 +123,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.Insert(baseURL, sessionID)
+	key, err := s.storage.InsertDB(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -165,7 +166,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.Insert(baseURL, sessionID)
+	key, err := s.storage.InsertDB(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -207,7 +208,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 		})
 		return
 	}
-	key, err := s.storage.Insert(payload.URL, sessionID)
+	key, err := s.storage.InsertDB(ctx.Request.Context(), payload.URL, sessionID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Internal server I/O error",
@@ -227,8 +228,8 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 }
 
 func (s *Server) redirect(ctx *gin.Context) {
-	key := ctx.Param("keyID")
-	baseURL, err := s.storage.Get(key)
+	key := ctx.Param("id")
+	baseURL, err := s.storage.GetDB(ctx.Request.Context(), key)
 	if err != nil {
 		ctx.String(http.StatusBadRequest, "Invalid key")
 		return
@@ -241,7 +242,7 @@ func (s *Server) getUserURLs(ctx *gin.Context) {
 	if err != nil {
 		return
 	}
-	urlMap, err := s.storage.GetUserURLs(sessionID)
+	urlMap, err := s.storage.GetUserURLsDB(ctx.Request.Context(), sessionID)
 	result := make([]URLPair, len(urlMap))
 	if len(result) < 1 || err != nil {
 		ctx.JSON(http.StatusNoContent, result)
@@ -261,8 +262,9 @@ func (s *Server) getUserURLs(ctx *gin.Context) {
 
 func (s *Server) pingDSN(ctx *gin.Context) {
 	ctx.Writer.Header().Set("Content-Type", "text/plain")
-	time.Sleep(s.pingTimeout)
-	ping := s.storage.Ping(ctx)
+	ctxTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Duration(s.pingTimeout))
+	defer cancel()
+	ping := s.storage.PingDB(ctxTimeout)
 	if ping != nil {
 		ctx.String(http.StatusInternalServerError, "DSN out of service timeout")
 		return

@@ -8,6 +8,12 @@ import (
 	"sync"
 )
 
+type Row struct {
+	Key   string `db:"id"`
+	UUID  string `db:"user_id"`
+	Value string `db:"origin_url"`
+}
+
 type Storage interface {
 	LoadFS() ([]Row, error)
 	InsertFS(value Row) error
@@ -22,7 +28,7 @@ type StorageDB struct {
 	dsn     *sql.DB
 }
 
-func New(s Storage, db *sql.DB) (*StorageDB, error) {
+func NewKV(s Storage) (*StorageDB, error) {
 	data, err := s.LoadFS()
 	if err != nil {
 		return nil, err
@@ -32,26 +38,20 @@ func New(s Storage, db *sql.DB) (*StorageDB, error) {
 		dataMap[data[item].Key] = data[item]
 	}
 	return &StorageDB{
-		counter: peekIntegerFromStack(data),
 		urls:    dataMap,
+		counter: peekIntegerFromStack(data),
 		storage: s,
-		dsn:     db,
 	}, nil
-}
-
-func (db *StorageDB) Ping(ctx context.Context) error {
-	return db.dsn.PingContext(ctx)
 }
 
 func (db *StorageDB) Insert(baseURL string, sessionID string) (string, error) {
 	db.Lock()
 	defer db.Unlock()
-
 	db.counter++
 	key := strconv.Itoa(db.counter)
 	row := Row{
-		UUID:  sessionID,
 		Key:   key,
+		UUID:  sessionID,
 		Value: baseURL,
 	}
 	db.urls[key] = row
@@ -61,7 +61,7 @@ func (db *StorageDB) Insert(baseURL string, sessionID string) (string, error) {
 	return key, nil
 }
 
-func (db *StorageDB) Get(key string) (string, error) {
+func (db *StorageDB) Get(ctx context.Context, key string) (string, error) {
 	db.RLock()
 	defer db.RUnlock()
 	row, ok := db.urls[key]
@@ -71,7 +71,7 @@ func (db *StorageDB) Get(key string) (string, error) {
 	return row.Value, nil
 }
 
-func (db *StorageDB) GetUserURLs(sessionID string) (map[string]string, error) {
+func (db *StorageDB) GetUserURLs(ctx context.Context, sessionID string) (map[string]string, error) {
 	data := make(map[string]string)
 	for _, row := range db.urls {
 		if row.UUID == sessionID {

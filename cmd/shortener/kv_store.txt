@@ -1,2 +1,0 @@
-{"UUID":"afd92c82-be78-43ef-8fce-a5c11ebe5b07","Key":"2","Value":"https://explorer.avtorskydeployed.online/"}
-{"UUID":"6a15c16b-b941-48b3-be78-8e539838d612","Key":"3","Value":"https://yatube.avtorskydeployed.online/"}

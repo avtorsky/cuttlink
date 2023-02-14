@@ -14,20 +14,30 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	fileStorage, err := storage.NewFileStorage(cfg.FileStoragePath)
 	if err != nil {
 		panic(err)
 	}
 	defer fileStorage.CloseFS()
+
 	db, err := sql.Open("pgx", cfg.DatabaseDSN)
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
-	localStorage, err := storage.New(fileStorage, db)
-	if err != nil {
-		panic(err)
+
+	var localStorage *storage.StorageDB
+	switch {
+	case db == nil, cfg.DatabaseDSN == "":
+		localStorage, _ = storage.NewKV(fileStorage)
+	default:
+		if err = storage.Migrate(db); err != nil {
+			panic(err)
+		}
+		localStorage, _ = storage.NewDB(db)
 	}
+
 	localServer, err := server.New(
 		localStorage,
 		server.WithServerHost(cfg.ServerHost),
@@ -36,5 +46,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	localServer.ListenAndServe()
 }

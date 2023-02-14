@@ -13,12 +13,6 @@ type FileStorage struct {
 	filename string
 }
 
-type Row struct {
-	UUID  string
-	Key   string
-	Value string
-}
-
 func NewFileStorage(filename string) (*FileStorage, error) {
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
