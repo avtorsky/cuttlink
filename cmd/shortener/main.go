@@ -26,7 +26,7 @@ func main() {
 	}
 	defer fileStorage.CloseFS()
 
-	db, err := sql.Open("postgres", cfg.DatabaseDSN)
+	db, err := sql.Open("pgx", cfg.DatabaseDSN)
 	if err != nil {
 		panic(err)
 	}
@@ -41,7 +41,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("unable to init db driver: %v", err)
 		}
-		m, err := migrate.NewWithDatabaseInstance("file://./migrations", "cldev", driver)
+		m, err := migrate.NewWithDatabaseInstance("file://./cmd/shortener/migrations", "cldev", driver)
 		if err != nil {
 			log.Fatalf("unable to init db migrator: %v", err)
 		}

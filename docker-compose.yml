@@ -3,7 +3,7 @@ services:
 
   cuttlink_db_service:
     image: postgres:15.1-bullseye
-    container_name: postgres
+    container_name: cuttlink_db
     hostname: postgres
     volumes:
       - /var/lib/postgresql/data/
