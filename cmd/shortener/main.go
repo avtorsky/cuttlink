@@ -26,7 +26,7 @@ func main() {
 	}
 	defer fileStorage.CloseFS()
 
-	db, err := sql.Open("pgx", cfg.DatabaseDSN)
+	db, err := sql.Open("postgres", cfg.DatabaseDSN)
 	if err != nil {
 		panic(err)
 	}
