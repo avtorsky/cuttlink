@@ -123,7 +123,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.InsertDB(ctx.Request.Context(), baseURL, sessionID)
+	key, err := s.storage.Insert(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -166,7 +166,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.InsertDB(ctx.Request.Context(), baseURL, sessionID)
+	key, err := s.storage.Insert(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -208,7 +208,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 		})
 		return
 	}
-	key, err := s.storage.InsertDB(ctx.Request.Context(), payload.URL, sessionID)
+	key, err := s.storage.Insert(ctx.Request.Context(), payload.URL, sessionID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Internal server I/O error",
@@ -229,7 +229,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 
 func (s *Server) redirect(ctx *gin.Context) {
 	key := ctx.Param("id")
-	baseURL, err := s.storage.GetDB(ctx.Request.Context(), key)
+	baseURL, err := s.storage.Get(ctx.Request.Context(), key)
 	if err != nil {
 		ctx.String(http.StatusBadRequest, "Invalid key")
 		return
@@ -242,7 +242,7 @@ func (s *Server) getUserURLs(ctx *gin.Context) {
 	if err != nil {
 		return
 	}
-	urlMap, err := s.storage.GetUserURLsDB(ctx.Request.Context(), sessionID)
+	urlMap, err := s.storage.GetUserURLs(ctx.Request.Context(), sessionID)
 	result := make([]URLPair, len(urlMap))
 	if len(result) < 1 || err != nil {
 		ctx.JSON(http.StatusNoContent, result)
@@ -264,8 +264,8 @@ func (s *Server) pingDSN(ctx *gin.Context) {
 	ctx.Writer.Header().Set("Content-Type", "text/plain")
 	ctxTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Duration(s.pingTimeout))
 	defer cancel()
-	ping := s.storage.PingDB(ctxTimeout)
-	if ping != nil {
+	err := s.storage.Ping(ctxTimeout)
+	if err != nil {
 		ctx.String(http.StatusInternalServerError, "DSN out of service timeout")
 		return
 	}

@@ -2,10 +2,15 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"github.com/avtorsky/cuttlink/internal/config"
 	"github.com/avtorsky/cuttlink/internal/server"
 	"github.com/avtorsky/cuttlink/internal/storage"
+	"log"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -32,8 +37,16 @@ func main() {
 	case db == nil, cfg.DatabaseDSN == "":
 		localStorage, _ = storage.NewKV(fileStorage)
 	default:
-		if err = storage.Migrate(db); err != nil {
-			panic(err)
+		driver, err := postgres.WithInstance(db, &postgres.Config{})
+		if err != nil {
+			log.Fatalf("unable to init db driver: %v", err)
+		}
+		m, err := migrate.NewWithDatabaseInstance("file://./migrations", "cldev", driver)
+		if err != nil {
+			log.Fatalf("unable to init db migrator: %v", err)
+		}
+		if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+			log.Fatalf("unable to migrate: %v", err)
 		}
 		localStorage, _ = storage.NewDB(db)
 	}

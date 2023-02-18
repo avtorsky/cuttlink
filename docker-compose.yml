@@ -10,10 +10,28 @@ services:
       POSTGRES_DB: cldev
       POSTGRES_USER: cluser
       POSTGRES_PASSWORD: clpassword
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "cluser", "-d", "cldev"]
-      interval: 42s
-      timeout: 42s
-      retries: 42
     ports:
       - 5432:5432
+    networks:
+      - cuttlink_dev_net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cluser", "-d", "cldev"]
+      interval: 1s
+      timeout: 1s
+      retries: 42
+
+  cuttlink_dev_migration:
+    image: migrate/migrate:latest
+    container_name: cuttlink_migrator
+    volumes:
+      - ./cmd/shortener/migrations:/migrations
+    networks:
+      - cuttlink_dev_net
+    depends_on:
+      - cuttlink_dev_dsn
+    command: -source=file:///migrations -database postgres://cluser:clpassword@172.26.0.2:5432/cldev?sslmode=disable up
+    restart: on-failure
+
+networks:
+  cuttlink_dev_net:
+    driver: bridge

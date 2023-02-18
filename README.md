@@ -6,7 +6,7 @@
 [Healthcheck](#healthcheck) /
 [Changelog](#changelog)
 
-[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter9)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
+[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter10)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
 
 ## About
 URL shortener service
@@ -20,10 +20,10 @@ git clone https://github.com/avtorsky/cuttlink.git
 cd cuttlink
 ```
 
-Initiate DSN build and compile binary:
+Initiate build and compile binary:
 
 ```bash
-docker-compose up -d --build cuttlink_dev_dsn
+docker-compose up -d --build
 cd cmd/shortener
 go build -o cuttlink main.go
 ```
@@ -38,7 +38,7 @@ Usage of ./cuttlink:
   -b string
     	define base URL (default "http://localhost:8080")
   -d string
-    	define DSN connection (default "postgres://cluser:clpassword@localhost:5432/cldev")
+    	define DSN connection (default "postgres://cluser:clpassword@localhost:5432/cldev?sslmode=disable")
   -f string
     	define file storage path (default "kv_store.txt")
 
@@ -75,8 +75,11 @@ Location: https://explorer.avtorskydeployed.online/
 
 ## Changelog
 
+Release 20230215:
+* feat(./internal/storage/migrations): PostgreSQL migrations config
+
 Release 20230214:
-* feat(./internal/storage): sprint3 iter11 DSN migration to PostgreSQL with fallback option
+* refactor(./internal/storage): sprint3 iter11 DSN migration to PostgreSQL with fallback option
 
 Release 20230205:
 * feat(./internal/server): sprint3 iter10 DSN connection config && /ping healthcheck endpoint setup

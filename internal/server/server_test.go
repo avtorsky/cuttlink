@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/avtorsky/cuttlink/internal/storage"
@@ -40,7 +41,7 @@ func NewTestServer(t *testing.T) TestServer {
 		decompressMiddleware(),
 		cookieAuthentication(),
 	)
-	r.GET("/:keyID", s.redirect)
+	r.GET("/:id", s.redirect)
 	r.POST("/", s.createShortURL)
 	r.POST("/form-submit", s.createShortURLWebForm)
 	r.POST("/api/shorten", s.createShortURLJSON)
@@ -62,7 +63,6 @@ func (s *TestServer) Close() {
 }
 
 func TestServer__createShortURLWebForm(t *testing.T) {
-	t.SkipNow()
 	ts := NewTestServer(t)
 	defer ts.Close()
 	client := http.Client{}
@@ -140,7 +140,6 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 }
 
 func TestServer__createShortURLJSON(t *testing.T) {
-	t.SkipNow()
 	ts := NewTestServer(t)
 	defer ts.Close()
 	client := http.Client{}
@@ -234,11 +233,10 @@ func TestServer__createShortURLJSON(t *testing.T) {
 }
 
 func TestServer__redirect(t *testing.T) {
-	t.SkipNow()
 	ts := NewTestServer(t)
 	defer ts.Close()
 	baseURL := "https://yatube.avtorskydeployed.online"
-	key, err := ts.storage.Insert(baseURL, "6a15c16b-b941-48b3-be78-8e539838d612")
+	key, err := ts.storage.Insert(context.Background(), baseURL, "6a15c16b-b941-48b3-be78-8e539838d612")
 	assert.Nil(t, err)
 	client := http.Client{}
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -283,7 +281,6 @@ func TestServer__redirect(t *testing.T) {
 }
 
 func TestServer__getUserURLs(t *testing.T) {
-	t.SkipNow()
 	ts := NewTestServer(t)
 	defer ts.Close()
 	jar, _ := cookiejar.New(nil)
