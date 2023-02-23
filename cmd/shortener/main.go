@@ -20,10 +20,7 @@ func main() {
 		panic(err)
 	}
 
-	fileStorage, err := storage.NewFileStorage(cfg.FileStoragePath)
-	if err != nil {
-		panic(err)
-	}
+	fileStorage, _ := storage.NewFile(cfg.FileStoragePath)
 	defer fileStorage.CloseFS()
 
 	db, err := sql.Open("pgx", cfg.DatabaseDSN)
@@ -32,16 +29,13 @@ func main() {
 	}
 	defer db.Close()
 
-	var localStorage *storage.StorageDB
-	switch {
-	case db == nil, cfg.DatabaseDSN == "":
-		localStorage, _ = storage.NewKV(fileStorage)
-	default:
+	var localStorage storage.Storager
+	if db != nil && cfg.DatabaseDSN != "" {
 		driver, err := postgres.WithInstance(db, &postgres.Config{})
 		if err != nil {
 			log.Fatalf("unable to init db driver: %v", err)
 		}
-		m, err := migrate.NewWithDatabaseInstance("file://./cmd/shortener/migrations", "cldev", driver)
+		m, err := migrate.NewWithDatabaseInstance(cfg.MigrationsPath, "cldev", driver)
 		if err != nil {
 			log.Fatalf("unable to init db migrator: %v", err)
 		}
@@ -49,6 +43,10 @@ func main() {
 			log.Fatalf("unable to migrate: %v", err)
 		}
 		localStorage, _ = storage.NewDB(db)
+	} else if db == nil && cfg.DatabaseDSN == "" && fileStorage != nil && cfg.FileStoragePath != "" {
+		localStorage, _ = storage.NewFileStorage(fileStorage)
+	} else {
+		localStorage, _ = storage.NewInMemoryStorage()
 	}
 
 	localServer, err := server.New(

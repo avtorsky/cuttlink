@@ -29,7 +29,7 @@ type URLPair struct {
 
 type Server struct {
 	srv         *http.Server
-	storage     *storage.StorageDB
+	storage     storage.Storager
 	serverHost  string
 	serviceHost string
 	pingTimeout time.Duration
@@ -51,7 +51,7 @@ func WithServiceHost(bURL string) ServerOption {
 	}
 }
 
-func New(storage *storage.StorageDB, opts ...ServerOption) (Server, error) {
+func New(storage storage.Storager, opts ...ServerOption) (Server, error) {
 	const (
 		defaultServerHost  = ":8080"
 		defaultServiceHost = "http://localhost:8080"
@@ -123,7 +123,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.Insert(ctx.Request.Context(), baseURL, sessionID)
+	key, err := s.storage.SetURL(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -166,7 +166,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.Insert(ctx.Request.Context(), baseURL, sessionID)
+	key, err := s.storage.SetURL(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -208,7 +208,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 		})
 		return
 	}
-	key, err := s.storage.Insert(ctx.Request.Context(), payload.URL, sessionID)
+	key, err := s.storage.SetURL(ctx.Request.Context(), payload.URL, sessionID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Internal server I/O error",
@@ -229,7 +229,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 
 func (s *Server) redirect(ctx *gin.Context) {
 	key := ctx.Param("id")
-	baseURL, err := s.storage.Get(ctx.Request.Context(), key)
+	baseURL, err := s.storage.GetURL(ctx.Request.Context(), key)
 	if err != nil {
 		ctx.String(http.StatusBadRequest, "Invalid key")
 		return

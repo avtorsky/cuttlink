@@ -38,11 +38,13 @@ Usage of ./cuttlink:
   -b string
     	define base URL (default "http://localhost:8080")
   -d string
-    	define DSN connection (default "postgres://cluser:clpassword@localhost:5432/cldev?sslmode=disable")
+    	define DSN connection (default "postgres://cluser:clpassword@localhost/cldev?sslmode=disable")
   -f string
     	define file storage path (default "kv_store.txt")
+  -m string
+    	define DB migrations path (default "file://./migrations")
 
-./cuttlink
+./cuttlink -m "file://./cmd/shortener/migrations"
 ```
 
 ## Testing
@@ -75,11 +77,14 @@ Location: https://explorer.avtorskydeployed.online/
 
 ## Changelog
 
+Release 20230223:
+* refactor(./internal/storage): Storager interface implementation
+
 Release 20230215:
 * feat(./internal/storage/migrations): PostgreSQL migrations config
 
 Release 20230214:
-* refactor(./internal/storage): sprint3 iter11 DSN migration to PostgreSQL with fallback option
+* refactor(./internal/storage): sprint3 iter11 DSN migration to PostgreSQL with rollback option
 
 Release 20230205:
 * feat(./internal/server): sprint3 iter10 DSN connection config && /ping healthcheck endpoint setup

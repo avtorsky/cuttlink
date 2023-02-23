@@ -20,16 +20,15 @@ import (
 
 type TestServer struct {
 	*httptest.Server
-	storage  *storage.StorageDB
-	kvstore  *storage.FileStorage
+	storage  storage.Storager
 	filename string
 }
 
 func NewTestServer(t *testing.T) TestServer {
 	file, err := os.CreateTemp("", "cuttlink-test-*.txt")
 	assert.Nil(t, err)
-	tfs, _ := storage.NewFileStorage(file.Name())
-	ls, _ := storage.NewKV(tfs)
+	tfs, _ := storage.NewFile(file.Name())
+	ls, _ := storage.NewFileStorage(tfs)
 	s, err := New(ls)
 	assert.Nil(t, err)
 	gin.ForceConsoleColor()
@@ -50,7 +49,6 @@ func NewTestServer(t *testing.T) TestServer {
 	srv := TestServer{
 		Server:   ts,
 		storage:  ls,
-		kvstore:  tfs,
 		filename: file.Name(),
 	}
 	return srv
@@ -58,7 +56,6 @@ func NewTestServer(t *testing.T) TestServer {
 
 func (s *TestServer) Close() {
 	s.Server.Close()
-	s.kvstore.CloseFS()
 	os.Remove(s.filename)
 }
 
@@ -236,7 +233,7 @@ func TestServer__redirect(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
 	baseURL := "https://yatube.avtorskydeployed.online"
-	key, err := ts.storage.Insert(context.Background(), baseURL, "6a15c16b-b941-48b3-be78-8e539838d612")
+	key, err := ts.storage.SetURL(context.Background(), baseURL, "6a15c16b-b941-48b3-be78-8e539838d612")
 	assert.Nil(t, err)
 	client := http.Client{}
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
