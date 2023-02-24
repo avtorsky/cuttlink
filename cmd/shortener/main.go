@@ -42,8 +42,8 @@ func main() {
 			log.Fatalf("unable to migrate: %v", err)
 		}
 		localStorage, _ = storage.NewDB(db)
-		// defer db.Close()
-	} else if db == nil && cfg.DatabaseDSN == "" && fileStorage != nil && cfg.FileStoragePath != "" {
+		defer db.Close()
+	} else if fileStorage != nil && cfg.FileStoragePath != "" {
 		localStorage, _ = storage.NewFileStorage(fileStorage)
 	} else {
 		localStorage, _ = storage.NewInMemoryStorage()
