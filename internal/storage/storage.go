@@ -2,11 +2,12 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
 	"sync"
+
+	"github.com/jmoiron/sqlx"
 )
 
 type Row struct {
@@ -39,7 +40,7 @@ type FileStorage struct {
 
 type DB struct {
 	sync.RWMutex
-	storage *sql.DB
+	storage *sqlx.DB
 }
 
 func NewInMemoryStorage() (*InMemoryStorage, error) {
@@ -66,7 +67,7 @@ func NewFileStorage(fs *File) (*FileStorage, error) {
 	}, nil
 }
 
-func NewDB(db *sql.DB) (*DB, error) {
+func NewDB(db *sqlx.DB) (*DB, error) {
 	return &DB{storage: db}, nil
 }
 
@@ -168,7 +169,7 @@ func (fs *FileStorage) Close() error {
 func (db *DB) GetURL(ctx context.Context, key string) (string, error) {
 	query := "SELECT original_url FROM cuttlink WHERE id=$1"
 	var row Row
-	if err := db.storage.QueryRowContext(ctx, query, key).Scan(&row.Value); err != nil {
+	if err := db.storage.GetContext(ctx, &row, query, key); err != nil {
 		return "", err
 	}
 	return row.Value, nil
@@ -177,27 +178,14 @@ func (db *DB) GetURL(ctx context.Context, key string) (string, error) {
 func (db *DB) GetUserURLs(ctx context.Context, sessionID string) (map[string]string, error) {
 	query := "SELECT id, user_id, original_url FROM cuttlink WHERE user_id=$1 ORDER BY id"
 	items := make([]Row, 0)
-	rows, err := db.storage.QueryContext(ctx, query, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var row Row
-		err = rows.Scan(&row.Key, &row.UUID, &row.Value)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, row)
-	}
-	err = rows.Err()
+	err := db.storage.SelectContext(ctx, &items, query, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	data := make(map[string]string)
 	for item := range items {
 		row := items[item]
-		data[fmt.Sprintf(row.Key)] = row.Value
+		data[fmt.Sprint(row.Key)] = row.Value
 	}
 	return data, nil
 }
@@ -205,15 +193,52 @@ func (db *DB) GetUserURLs(ctx context.Context, sessionID string) (map[string]str
 func (db *DB) SetURL(ctx context.Context, url string, sessionID string) (string, error) {
 	query := "INSERT INTO cuttlink(user_id, original_url) VALUES($1, $2) RETURNING id"
 	var id string
-	if err := db.storage.QueryRowContext(ctx, query, sessionID, url).Scan(&id); err != nil {
+	if err := db.storage.GetContext(ctx, &id, query, sessionID, url); err != nil {
 		return "", err
 	}
 	return fmt.Sprint(id), nil
 }
 
-// to be done after checkout to iter12
 func (db *DB) SetBatchURL(ctx context.Context, urlBatch []string, sessionID string) ([]string, error) {
-	return nil, errors.New("database invalid method")
+	if len(urlBatch) == 0 {
+		return make([]string, 0), nil
+	}
+	data := make([]map[string]interface{}, len(urlBatch))
+	for item := range urlBatch {
+		data[item] = map[string]interface{}{
+			"user_id":      sessionID,
+			"original_url": urlBatch[item],
+		}
+	}
+	tx, err := db.storage.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	query := "INSERT INTO cuttlink(user_id, original_url) VALUES(:user_id, :original_url) RETURNING id"
+	rows, err := db.storage.NamedQueryContext(ctx, query, data)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	result := make([]string, len(urlBatch))
+	item := 0
+	for rows.Next() {
+		var id string
+		err = rows.Scan(&id)
+		if err != nil {
+			return nil, err
+		}
+		result[item] = id
+		item++
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (db *DB) Ping(ctx context.Context) error {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
 	"github.com/avtorsky/cuttlink/internal/config"
 	"github.com/avtorsky/cuttlink/internal/server"
@@ -12,6 +11,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 )
 
 func main() {
@@ -23,15 +23,14 @@ func main() {
 	fileStorage, _ := storage.NewFile(cfg.FileStoragePath)
 	defer fileStorage.CloseFS()
 
-	db, err := sql.Open("pgx", cfg.DatabaseDSN)
+	db, err := sqlx.Open("pgx", cfg.DatabaseDSN)
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
 
 	var localStorage storage.Storager
 	if db != nil && cfg.DatabaseDSN != "" {
-		driver, err := postgres.WithInstance(db, &postgres.Config{})
+		driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
 		if err != nil {
 			log.Fatalf("unable to init db driver: %v", err)
 		}
@@ -43,6 +42,7 @@ func main() {
 			log.Fatalf("unable to migrate: %v", err)
 		}
 		localStorage, _ = storage.NewDB(db)
+		// defer db.Close()
 	} else if db == nil && cfg.DatabaseDSN == "" && fileStorage != nil && cfg.FileStoragePath != "" {
 		localStorage, _ = storage.NewFileStorage(fileStorage)
 	} else {

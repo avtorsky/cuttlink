@@ -77,6 +77,9 @@ Location: https://explorer.avtorskydeployed.online/
 
 ## Changelog
 
+Release 20230224:
+* feat(./internal/storage): sprint3 iter12 sqlx.DB swap to do batch insertions
+
 Release 20230223:
 * refactor(./internal/storage): Storager interface implementation
 
