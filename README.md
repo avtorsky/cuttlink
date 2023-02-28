@@ -77,8 +77,11 @@ Location: https://explorer.avtorskydeployed.online/
 
 ## Changelog
 
+Release 20230228:
+* feat(./internal/storage): sprint3 iter13 PostgreSQL unique constraint handling
+
 Release 20230224:
-* feat(./internal/storage): sprint3 iter12 sqlx.DB swap to do batch insertions
+* feat(./internal/storage): sprint3 iter12 swap to sqlx.DB for batch insertions
 
 Release 20230223:
 * refactor(./internal/storage): Storager interface implementation

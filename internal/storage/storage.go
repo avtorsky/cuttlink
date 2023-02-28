@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/jmoiron/sqlx"
@@ -14,6 +15,11 @@ type Row struct {
 	Key   string `db:"id"`
 	UUID  string `db:"user_id"`
 	Value string `db:"original_url"`
+}
+
+type DuplicateURLError struct {
+	Key string
+	Err error
 }
 
 type Storager interface {
@@ -69,6 +75,21 @@ func NewFileStorage(fs *File) (*FileStorage, error) {
 
 func NewDB(db *sqlx.DB) (*DB, error) {
 	return &DB{storage: db}, nil
+}
+
+func (e *DuplicateURLError) Error() string {
+	return fmt.Sprintf("key exists: %s, %s", e.Key, e.Err.Error())
+}
+
+func (e *DuplicateURLError) Unwrap() error {
+	return e.Err
+}
+
+func NewDuplicateURLError(key string, err error) error {
+	return &DuplicateURLError{
+		Key: key,
+		Err: err,
+	}
 }
 
 func (ms *InMemoryStorage) GetURL(ctx context.Context, key string) (string, error) {
@@ -193,10 +214,18 @@ func (db *DB) GetUserURLs(ctx context.Context, sessionID string) (map[string]str
 func (db *DB) SetURL(ctx context.Context, url string, sessionID string) (string, error) {
 	query := "INSERT INTO cuttlink(user_id, original_url) VALUES($1, $2) RETURNING id"
 	var id string
-	if err := db.storage.GetContext(ctx, &id, query, sessionID, url); err != nil {
+	err := db.storage.GetContext(ctx, &id, query, sessionID, url)
+	if err != nil && strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+		var row Row
+		q := "SELECT * FROM cuttlink WHERE original_url=$1"
+		if e := db.storage.GetContext(ctx, &row, q, url); e != nil {
+			return "", e
+		}
+		return "", NewDuplicateURLError(row.Key, err)
+	} else if err != nil {
 		return "", err
 	}
-	return fmt.Sprint(id), nil
+	return id, nil
 }
 
 func (db *DB) SetBatchURL(ctx context.Context, urlBatch []string, sessionID string) ([]string, error) {
