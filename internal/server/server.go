@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/avtorsky/cuttlink/internal/storage"
 	"io"
@@ -136,6 +137,13 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 	}
 	key, err := s.storage.SetURL(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
+		ctx.Writer.Header().Set("Content-Type", "text/plain")
+		var dbError *storage.DuplicateURLError
+		if errors.As(err, &dbError) {
+			shortURL := fmt.Sprintf("%s/%s", s.serviceHost, dbError.Key)
+			ctx.String(http.StatusConflict, shortURL)
+			return
+		}
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
 	}
@@ -179,6 +187,13 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 	}
 	key, err := s.storage.SetURL(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
+		ctx.Writer.Header().Set("Content-Type", "application/x-www-form-urlencoded")
+		var dbError *storage.DuplicateURLError
+		if errors.As(err, &dbError) {
+			shortURL := fmt.Sprintf("%s/%s", s.serviceHost, dbError.Key)
+			ctx.String(http.StatusConflict, shortURL)
+			return
+		}
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
 	}
@@ -221,6 +236,15 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 	}
 	key, err := s.storage.SetURL(ctx.Request.Context(), payload.URL, sessionID)
 	if err != nil {
+		ctx.Writer.Header().Set("Content-Type", "application/json")
+		var dbError *storage.DuplicateURLError
+		if errors.As(err, &dbError) {
+			shortURL := ResponseJSON{
+				Result: fmt.Sprintf("%s/%s", s.serviceHost, dbError.Key),
+			}
+			ctx.JSON(http.StatusConflict, shortURL)
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Internal server I/O error",
 		})

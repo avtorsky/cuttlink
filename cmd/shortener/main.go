@@ -23,13 +23,13 @@ func main() {
 	fileStorage, _ := storage.NewFile(cfg.FileStoragePath)
 	defer fileStorage.CloseFS()
 
-	db, err := sqlx.Open("pgx", cfg.DatabaseDSN)
-	if err != nil {
-		panic(err)
-	}
-
 	var localStorage storage.Storager
-	if db != nil && cfg.DatabaseDSN != "" {
+	switch {
+	case cfg.DatabaseDSN != "":
+		db, err := sqlx.Open("pgx", cfg.DatabaseDSN)
+		if err != nil {
+			log.Fatalf("unable to init sqlx: %v", err)
+		}
 		driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
 		if err != nil {
 			log.Fatalf("unable to init db driver: %v", err)
@@ -43,9 +43,9 @@ func main() {
 		}
 		localStorage, _ = storage.NewDB(db)
 		defer db.Close()
-	} else if fileStorage != nil && cfg.FileStoragePath != "" {
+	case fileStorage != nil && cfg.FileStoragePath != "":
 		localStorage, _ = storage.NewFileStorage(fileStorage)
-	} else {
+	default:
 		localStorage, _ = storage.NewInMemoryStorage()
 	}
 
