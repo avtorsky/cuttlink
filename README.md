@@ -6,7 +6,7 @@
 [Healthcheck](#healthcheck) /
 [Changelog](#changelog)
 
-[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter10)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
+[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter13)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
 
 ## About
 URL shortener service
