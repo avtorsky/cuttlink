@@ -27,6 +27,16 @@ type URLPair struct {
 	ShortURL    string `json:"short_url"`
 }
 
+type URLPairRequest struct {
+	CorrelationID string `json:"correlation_id"`
+	OriginalURL   string `json:"original_url" binding:"required"`
+}
+
+type URLPairResponse struct {
+	CorrelationID string `json:"correlation_id"`
+	ShortURL      string `json:"short_url"`
+}
+
 type Server struct {
 	srv         *http.Server
 	storage     storage.Storager
@@ -82,6 +92,7 @@ func New(storage storage.Storager, opts ...ServerOption) (Server, error) {
 	r.POST("/", s.createShortURL)
 	r.POST("/form-submit", s.createShortURLWebForm)
 	r.POST("/api/shorten", s.createShortURLJSON)
+	r.POST("/api/shorten/batch", s.createShortURLBatch)
 	r.GET("/api/user/urls", s.getUserURLs)
 	r.GET("/ping", s.pingDSN)
 	srv := http.Server{
@@ -225,6 +236,64 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 		panic(err)
 	}
 	fmt.Println(string(result))
+}
+
+func (s *Server) createShortURLBatch(ctx *gin.Context) {
+	headerContentType := ctx.Request.Header.Get("Content-Type")
+	sessionID, err := getUUID(ctx)
+	if err != nil {
+		return
+	}
+	if headerContentType != "application/json" {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Invalid Content-Type header",
+		})
+		return
+	}
+	request := make([]URLPairRequest, 0)
+	if err := ctx.BindJSON(&request); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "Invalid payload",
+		})
+		return
+	}
+	size := len(request)
+	urlBatch := make([]string, size)
+	for i := range request {
+		if _, err := url.ParseRequestURI(request[i].OriginalURL); err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"message": "Invalid URL scheme",
+			})
+			return
+		}
+		u, _ := url.Parse(request[i].OriginalURL)
+		if u.Host == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"message": "Invalid URL host",
+			})
+			return
+		}
+		urlBatch[i] = request[i].OriginalURL
+	}
+	urlBatch, err = s.storage.SetBatchURL(ctx.Request.Context(), urlBatch, sessionID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Internal server I/O error",
+		})
+		return
+	}
+	response := make([]URLPairResponse, size)
+	for i := range request {
+		response[i] = URLPairResponse{
+			CorrelationID: request[i].CorrelationID,
+			ShortURL:      fmt.Sprintf("%s/%s", s.serviceHost, urlBatch[i]),
+		}
+	}
+	ctx.Writer.Header().Set("Content-Type", "application/json")
+	if len(response) == 0 {
+		ctx.JSON(http.StatusNoContent, response)
+	}
+	ctx.JSON(http.StatusCreated, response)
 }
 
 func (s *Server) redirect(ctx *gin.Context) {
