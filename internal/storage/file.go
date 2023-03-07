@@ -8,34 +8,28 @@ import (
 
 const bufMaxBytes = 1024
 
-type FileStorage struct {
+type File struct {
 	file     *os.File
 	filename string
 }
 
-type Row struct {
-	UUID  string
-	Key   string
-	Value string
-}
-
-func NewFileStorage(filename string) (*FileStorage, error) {
+func NewFile(filename string) (*File, error) {
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
 		return nil, err
 	}
-	return &FileStorage{
+	return &File{
 		file:     file,
 		filename: filename,
 	}, nil
 }
 
-func (fs *FileStorage) CloseFS() error {
-	return fs.file.Close()
+func (f *File) CloseFS() error {
+	return f.file.Close()
 }
 
-func (fs *FileStorage) LoadFS() ([]Row, error) {
-	file, err := os.OpenFile(fs.filename, os.O_RDONLY|os.O_CREATE, 0777)
+func (f *File) LoadFS() ([]Row, error) {
+	file, err := os.OpenFile(f.filename, os.O_RDONLY|os.O_CREATE, 0777)
 	if err != nil {
 		return nil, err
 	}
@@ -60,17 +54,17 @@ func (fs *FileStorage) LoadFS() ([]Row, error) {
 	return data, nil
 }
 
-func (fs *FileStorage) InsertFS(value Row) error {
+func (f *File) InsertFS(value Row) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
-	_, err = fs.file.Write(data)
+	_, err = f.file.Write(data)
 	if err != nil {
 		return err
 	}
-	err = fs.file.Sync()
+	err = f.file.Sync()
 	if err != nil {
 		return err
 	}
