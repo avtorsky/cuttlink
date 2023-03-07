@@ -14,6 +14,7 @@ type FileStorage struct {
 }
 
 type Row struct {
+	UUID  string
 	Key   string
 	Value string
 }
@@ -23,7 +24,6 @@ func NewFileStorage(filename string) (*FileStorage, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &FileStorage{
 		file:     file,
 		filename: filename,
@@ -34,7 +34,7 @@ func (fs *FileStorage) CloseFS() error {
 	return fs.file.Close()
 }
 
-func (fs *FileStorage) LoadFS() (map[string]string, error) {
+func (fs *FileStorage) LoadFS() ([]Row, error) {
 	file, err := os.OpenFile(fs.filename, os.O_RDONLY|os.O_CREATE, 0777)
 	if err != nil {
 		return nil, err
@@ -42,45 +42,37 @@ func (fs *FileStorage) LoadFS() (map[string]string, error) {
 	scanner := bufio.NewScanner(file)
 	buf := make([]byte, bufMaxBytes)
 	scanner.Buffer(buf, bufMaxBytes)
-	data := make(map[string]string)
-
+	data := make([]Row, 0)
 	for scanner.Scan() {
 		rawRow := scanner.Bytes()
 		var row Row
 		err := json.Unmarshal(rawRow, &row)
 		if err == nil {
-			data[row.Key] = row.Value
+			data = append(data, row)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-
 	if err := file.Close(); err != nil {
 		return nil, err
 	}
-
 	return data, nil
 }
 
-func (fs *FileStorage) InsertFS(key string, value string) error {
-	row := Row{Key: key, Value: value}
-	data, err := json.Marshal(row)
+func (fs *FileStorage) InsertFS(value Row) error {
+	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
-
 	_, err = fs.file.Write(data)
 	if err != nil {
 		return err
 	}
-
 	err = fs.file.Sync()
 	if err != nil {
 		return err
 	}
-
 	return nil
 }

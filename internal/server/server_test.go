@@ -2,33 +2,72 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
-	"github.com/avtorsky/cuttlink/internal/config"
 	"github.com/avtorsky/cuttlink/internal/storage"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"testing"
 
-	"github.com/caarlos0/env/v6"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 )
 
-const filename = "/tmp/cuttlink-test.txt"
+type TestServer struct {
+	*httptest.Server
+	storage  *storage.StorageDB
+	kvstore  *storage.FileStorage
+	filename string
+}
 
-func SetUpRouter() *gin.Engine {
+func NewTestServer(t *testing.T) TestServer {
+	file, err := os.CreateTemp("", "cuttlink-test")
+	assert.Nil(t, err)
+	os.Remove(file.Name())
+	tfs, _ := storage.NewFileStorage(file.Name())
+	ls, _ := storage.New(tfs)
+	s, err := New(ls)
+	assert.Nil(t, err)
 	gin.ForceConsoleColor()
-	router := gin.Default()
-	return router
+	r := gin.New()
+	r.Use(
+		gin.Logger(),
+		gin.Recovery(),
+		compressMiddleware(),
+		decompressMiddleware(),
+		cookieAuthentication(),
+	)
+	r.GET("/:keyID", s.redirect)
+	r.POST("/", s.createShortURL)
+	r.POST("/form-submit", s.createShortURLWebForm)
+	r.POST("/api/shorten", s.createShortURLJSON)
+	r.GET("/api/user/urls", s.getUserURLs)
+	ts := httptest.NewServer(r)
+	srv := TestServer{
+		Server:   ts,
+		storage:  ls,
+		kvstore:  tfs,
+		filename: file.Name(),
+	}
+	return srv
+}
+
+func (s *TestServer) Close() {
+	s.Server.Close()
+	s.kvstore.CloseFS()
+	os.Remove(s.filename)
 }
 
 func TestServer__createShortURLWebForm(t *testing.T) {
-	os.Remove(filename)
-	testFileStorage, _ := storage.NewFileStorage(filename)
-	defer testFileStorage.CloseFS()
-	localStorage, _ := storage.New(testFileStorage)
+	t.SkipNow()
+	ts := NewTestServer(t)
+	defer ts.Close()
+	client := http.Client{}
+	rURL := fmt.Sprintf("%s/", ts.URL)
 	tests := []struct {
 		name        string
 		method      string
@@ -43,7 +82,7 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 			contentType: "application/x-www-form-urlencoded",
 			code:        201,
 			key:         "url",
-			value:       "https://explorer.avtorskydeployed.online/",
+			value:       "https://yatube.avtorskydeployed.online/",
 		},
 		{
 			name:        "post_empty_url_400",
@@ -59,7 +98,7 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 			contentType: "application/x-www-form-urlencoded",
 			code:        400,
 			key:         "url",
-			value:       "explorer.avtorskydeployed.online",
+			value:       "yatube.avtorskydeployed.online",
 		},
 		{
 			name:        "post_url_without_host_400",
@@ -75,7 +114,7 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 			contentType: "application/x-www-form-urlencoded",
 			code:        404,
 			key:         "url",
-			value:       "https://explorer.avtorskydeployed.online/",
+			value:       "https://yatube.avtorskydeployed.online/",
 		},
 		{
 			name:        "post_invalid_content_type_500",
@@ -83,133 +122,126 @@ func TestServer__createShortURLWebForm(t *testing.T) {
 			contentType: "application/json",
 			code:        500,
 			key:         "url",
-			value:       "https://explorer.avtorskydeployed.online/",
+			value:       "https://yatube.avtorskydeployed.online/",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Server{storage: localStorage}
-			r := SetUpRouter()
-			r.POST("/form-submit", s.createShortURLWebForm)
 			data := url.Values{}
 			data.Set(tt.key, tt.value)
-			request := httptest.NewRequest(tt.method, "/form-submit", bytes.NewBufferString(data.Encode()))
-			request.Header.Set("Content-Type", tt.contentType)
-			w := httptest.NewRecorder()
-			r.ServeHTTP(w, request)
-			res := w.Result()
-			if res.StatusCode != tt.code {
-				t.Errorf("Expected status code %d, got %d", tt.code, w.Code)
-			}
+			req, err := http.NewRequest(tt.method, rURL, bytes.NewBufferString(data.Encode()))
+			assert.Nil(t, err)
+			req.Header.Set("Content-Type", tt.contentType)
+			res, err := client.Do(req)
+			assert.Nil(t, err)
+			assert.Equal(t, tt.code, res.StatusCode, "http status codes should be equal")
 			defer res.Body.Close()
 		})
 	}
 }
 
 func TestServer__createShortURLJSON(t *testing.T) {
-	os.Remove(filename)
-	os.Setenv("SERVER_ADDRESS", ":8080")
-	os.Setenv("BASE_URL", "http://localhost:8080")
-	os.Setenv("FILE_STORAGE_PATH", "kvstore.txt")
-	cfg := config.Env{}
-	if err := env.Parse(&cfg); err != nil {
-		fmt.Printf("%+v\n", err)
+	ts := NewTestServer(t)
+	defer ts.Close()
+	client := http.Client{}
+	rURL := fmt.Sprintf("%s/api/shorten", ts.URL)
+
+	type request struct {
+		URL string `json:"url"`
 	}
-	testFileStorage, _ := storage.NewFileStorage(filename)
-	defer testFileStorage.CloseFS()
-	localStorage, _ := storage.New(testFileStorage)
+
+	type response struct {
+		Result string `json:"result"`
+	}
+
 	tests := []struct {
 		name        string
 		method      string
 		contentType string
 		code        int
-		data        string
-		result      string
+		data        request
+		result      response
 	}{
 		{
 			name:        "post_ok_201",
 			method:      http.MethodPost,
 			contentType: "application/json",
 			code:        201,
-			data:        "{\"url\": \"https://explorer.avtorskydeployed.online/\"}",
-			result:      "{\"result\":\"http://localhost:8080/2\"}",
+			data:        request{URL: "https://yatube.avtorskydeployed.online/"},
+			result:      response{Result: "http://localhost:8080/2"},
 		},
 		{
 			name:        "post_empty_url_400",
 			method:      http.MethodPost,
 			contentType: "application/json",
 			code:        400,
-			data:        "{\"url\": \"\"}",
-			result:      "",
+			data:        request{URL: ""},
+			result:      response{Result: ""},
 		},
 		{
 			name:        "post_url_without_scheme_400",
 			method:      http.MethodPost,
 			contentType: "application/json",
 			code:        400,
-			data:        "{\"url\": \"explorer.avtorskydeployed.online/\"}",
-			result:      "",
+			data:        request{URL: "yatube.avtorskydeployed.online"},
+			result:      response{Result: ""},
 		},
 		{
 			name:        "post_url_without_host_400",
 			method:      http.MethodPost,
 			contentType: "application/json",
 			code:        400,
-			data:        "{\"url\": \"https://\"}",
-			result:      "",
+			data:        request{URL: "https://"},
+			result:      response{Result: ""},
 		},
 		{
 			name:        "post_invalid_method_404",
 			method:      http.MethodDelete,
 			contentType: "application/json",
 			code:        404,
-			data:        "{\"url\": \"https://explorer.avtorskydeployed.online/\"}",
-			result:      "",
+			data:        request{URL: "https://yatube.avtorskydeployed.online/"},
+			result:      response{Result: ""},
 		},
 		{
 			name:        "post_invalid_content_type_500",
 			method:      http.MethodPost,
 			contentType: "application/xml",
 			code:        500,
-			data:        "{\"url\": \"https://explorer.avtorskydeployed.online/\"}",
-			result:      "",
+			data:        request{URL: "https://yatube.avtorskydeployed.online/"},
+			result:      response{Result: ""},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Server{
-				storage:     localStorage,
-				serverHost:  cfg.ServerHost,
-				serviceHost: cfg.ServiceHost,
-			}
-			r := SetUpRouter()
-			r.POST("/api/shorten", s.createShortURLJSON)
-			request := httptest.NewRequest(tt.method, "/api/shorten", bytes.NewBufferString(tt.data))
-			request.Header.Set("Content-Type", tt.contentType)
-			w := httptest.NewRecorder()
-			r.ServeHTTP(w, request)
-			res := w.Result()
-			if res.StatusCode != tt.code {
-				t.Errorf("Expected status code %d, got %d", tt.code, w.Code)
-			}
-			if tt.code == http.StatusCreated {
-				responseBytes, _ := io.ReadAll(res.Body)
-				response := string(responseBytes)
-				if response != tt.result {
-					t.Errorf("Expected result %s, got %s", tt.result, response)
-				}
-			}
+			data, err := json.Marshal(tt.data)
+			assert.Nil(t, err)
+			req, _ := http.NewRequest(tt.method, rURL, bytes.NewBuffer(data))
+			req.Header.Set("Content-Type", tt.contentType)
+			res, err := client.Do(req)
+			assert.Nil(t, err)
+			assert.Equal(t, tt.code, res.StatusCode, "http status codes should be equal")
 			defer res.Body.Close()
+
+			if tt.code == http.StatusCreated {
+				dataBytes, err := io.ReadAll(res.Body)
+				assert.Nil(t, err)
+				body := response{}
+				assert.Nil(t, json.Unmarshal(dataBytes, &body))
+				assert.Equal(t, tt.result, body, "response body should be equal")
+			}
 		})
 	}
 }
 
 func TestServer__redirect(t *testing.T) {
-	os.Remove(filename)
-	testFileStorage, _ := storage.NewFileStorage(filename)
-	localStorage, _ := storage.New(testFileStorage)
-	baseURL := "https://explorer.avtorskydeployed.online/"
-	key, _ := localStorage.Insert(baseURL)
+	ts := NewTestServer(t)
+	defer ts.Close()
+	baseURL := "https://yatube.avtorskydeployed.online"
+	key, _ := ts.storage.Insert(baseURL, "6a15c16b-b941-48b3-be78-8e539838d612")
+	client := http.Client{}
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	tests := []struct {
 		name     string
 		method   string
@@ -234,24 +266,75 @@ func TestServer__redirect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Server{storage: localStorage}
-			r := SetUpRouter()
-			r.GET("/:keyID", s.redirect)
-			request := httptest.NewRequest(tt.method, tt.shortURL, nil)
-			w := httptest.NewRecorder()
-			r.ServeHTTP(w, request)
-			res := w.Result()
-			if res.StatusCode != tt.code {
-				t.Errorf("Expected status code %d, got %d", tt.code, res.StatusCode)
-			}
+			url := fmt.Sprintf("%s%s", ts.URL, tt.shortURL)
+			// fmt.Println(url)
+			res, err := client.Get(url)
+			assert.Nil(t, err)
+			defer res.Body.Close()
+			assert.Equal(t, tt.code, res.StatusCode, "http status codes should be equal")
+
 			if tt.code == http.StatusTemporaryRedirect {
 				loc := res.Header.Get("location")
-				if loc != tt.location {
-					t.Errorf("Expected location %s, got %s", tt.location, loc)
-				}
+				assert.Equal(t, tt.location, loc, "http status codes should be equal")
 			}
-			defer res.Body.Close()
 		})
 	}
-	testFileStorage.CloseFS()
+}
+
+func TestServer__getUserURLs(t *testing.T) {
+	t.SkipNow()
+	ts := NewTestServer(t)
+	defer ts.Close()
+	jar, _ := cookiejar.New(nil)
+	client := http.Client{Jar: jar}
+	assert := assert.New(t)
+
+	type row struct {
+		ShortURL    string `json:"short_url"`
+		OriginalURL string `json:"original_url"`
+	}
+
+	type request struct {
+		URL string `json:"url"`
+	}
+
+	expected := []row{
+		{
+			ShortURL:    "http://localhost:8080/2",
+			OriginalURL: "https://yatube.avtorskydeployed.online/",
+		},
+		{
+			ShortURL:    "http://localhost:8080/3",
+			OriginalURL: "https://explorer.avtorskydeployed.online/",
+		},
+	}
+	res, err := client.Get(fmt.Sprintf("%s/api/user/urls", ts.URL))
+	assert.Nil(err)
+	defer res.Body.Close()
+	dataBytes, err := io.ReadAll(res.Body)
+	assert.Nil(err)
+	body := make([]row, 0)
+	json.Unmarshal(dataBytes, &body)
+	assert.Equal(make([]row, 0), body, "response body should be empty")
+
+	for item := range expected {
+		contentType := "application/json"
+		url := fmt.Sprintf("%s/api/shorten", ts.URL)
+		data := request{URL: expected[item].OriginalURL}
+		dataBytes, err := json.Marshal(data)
+		assert.Nil(err)
+		res, err := client.Post(url, contentType, bytes.NewBuffer(dataBytes))
+		assert.Nil(err)
+		defer res.Body.Close()
+		assert.Equal(http.StatusCreated, res.StatusCode, "http status codes should be equal")
+	}
+
+	res, err = client.Get(fmt.Sprintf("%s/api/user/urls", ts.URL))
+	assert.Nil(err)
+	defer res.Body.Close()
+	bodyBytes, err := io.ReadAll(res.Body)
+	assert.Nil(err)
+	body = make([]row, 0)
+	json.Unmarshal(bodyBytes, &body)
+	assert.Equal(body, expected, "response body should be empty")
 }

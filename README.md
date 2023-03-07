@@ -6,12 +6,16 @@
 [Testing](#testing) /
 [Healthcheck](#healthcheck)
 
-[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter7)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
+[![CI](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml/badge.svg?branch=iter8)](https://github.com/avtorsky/cuttlink/actions/workflows/shortenertest.yml)
 
 ## About
 URL shortener service
 
 ## Changelog
+Release 20230204:
+* feat(./internal/server/session.go): sprint3 iter9 cookie-based UUID session auth config
+* test(./internal/server/server_test.go): getUserURLs unit tests setup && test table refactoring
+
 Release 20230122:
 * feat(./internal/server/gzip.go): sprint2 iter8 gzip compression config
 

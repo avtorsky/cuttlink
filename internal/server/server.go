@@ -20,6 +20,11 @@ type ResponseJSON struct {
 	Result string `json:"result"`
 }
 
+type respPair struct {
+	OriginalURL string `json:"original_url"`
+	ShortURL    string `json:"short_url"`
+}
+
 type Server struct {
 	storage     *storage.StorageDB
 	serverHost  string
@@ -68,16 +73,22 @@ func (s *Server) Run() {
 		gin.Recovery(),
 		compressMiddleware(),
 		decompressMiddleware(),
+		cookieAuthentication(),
 	)
 	r.GET("/:keyID", s.redirect)
 	r.POST("/", s.createShortURL)
 	r.POST("/form-submit", s.createShortURLWebForm)
 	r.POST("/api/shorten", s.createShortURLJSON)
+	r.GET("/api/user/urls", s.getUserURLs)
 	http.ListenAndServe(s.serverHost, r)
 }
 
 func (s *Server) createShortURL(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
+	sessionID, err := getUUID(ctx)
+	if err != nil {
+		return
+	}
 	var baseURL string
 	switch headerContentType {
 	case "application/x-gzip", "text/plain; charset=utf-8":
@@ -99,7 +110,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.Insert(baseURL)
+	key, err := s.storage.Insert(baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -111,6 +122,10 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 
 func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
+	sessionID, err := getUUID(ctx)
+	if err != nil {
+		return
+	}
 	var baseURL string
 	switch headerContentType {
 	case "application/x-gzip":
@@ -138,7 +153,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
-	key, err := s.storage.Insert(baseURL)
+	key, err := s.storage.Insert(baseURL, sessionID)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
@@ -150,6 +165,10 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 
 func (s *Server) createShortURLJSON(ctx *gin.Context) {
 	headerContentType := ctx.Request.Header.Get("Content-Type")
+	sessionID, err := getUUID(ctx)
+	if err != nil {
+		return
+	}
 	var payload PayloadJSON
 	if headerContentType != "application/json" {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -176,7 +195,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 		})
 		return
 	}
-	key, err := s.storage.Insert(payload.URL)
+	key, err := s.storage.Insert(payload.URL, sessionID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Internal server I/O error",
@@ -203,4 +222,28 @@ func (s *Server) redirect(ctx *gin.Context) {
 		return
 	}
 	ctx.Redirect(http.StatusTemporaryRedirect, baseURL)
+}
+
+func (s *Server) getUserURLs(ctx *gin.Context) {
+	sessionID, err := getUUID(ctx)
+	if err != nil {
+		return
+	}
+	urlMap, err := s.storage.GetUserURLs(sessionID)
+	result := make([]respPair, len(urlMap))
+	if len(result) < 1 || err != nil {
+		ctx.JSON(http.StatusNoContent, result)
+		return
+	}
+	item := 0
+	for key, url := range urlMap {
+		result[item] = respPair{
+			OriginalURL: url,
+			ShortURL:    fmt.Sprintf("%s/%s", s.serviceHost, key),
+		}
+		item++
+	}
+	fmt.Println(result)
+	ctx.Writer.Header().Set("Content-Type", "application/json")
+	ctx.JSON(http.StatusOK, result)
 }
