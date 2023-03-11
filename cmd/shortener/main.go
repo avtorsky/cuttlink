@@ -43,8 +43,10 @@ func main() {
 		}
 		localStorage, _ = storage.NewDB(db)
 		defer db.Close()
+
 	case fileStorage != nil && cfg.FileStoragePath != "":
 		localStorage, _ = storage.NewFileStorage(fileStorage)
+
 	default:
 		localStorage, _ = storage.NewInMemoryStorage()
 	}
