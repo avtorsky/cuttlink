@@ -134,9 +134,10 @@ func (ms *InMemoryStorage) SetURL(ctx context.Context, url string, sessionID str
 	ms.counter++
 	key := strconv.Itoa(ms.counter)
 	row := Row{
-		Key:   key,
-		UUID:  sessionID,
-		Value: url,
+		Key:       key,
+		UUID:      sessionID,
+		Value:     url,
+		IsDeleted: false,
 	}
 	ms.urls[key] = row
 
@@ -148,7 +149,18 @@ func (ms *InMemoryStorage) SetBatchURL(ctx context.Context, urlBatch []string, s
 }
 
 func (ms *InMemoryStorage) UpdateBatchURL(ctx context.Context, task workers.DeleteTask) error {
-	return errors.New("in-memory storage invalid method")
+	for _, key := range task.Keys {
+		row, ok := ms.urls[key]
+		if !ok {
+			continue
+		}
+		if row.UUID != task.UUID {
+			continue
+		}
+		row.IsDeleted = true
+		ms.urls[key] = row
+	}
+	return nil
 }
 
 func (ms *InMemoryStorage) Ping(ctx context.Context) error {
@@ -193,9 +205,10 @@ func (fs *FileStorage) SetURL(ctx context.Context, url string, sessionID string)
 	fs.counter++
 	key := strconv.Itoa(fs.counter)
 	row := Row{
-		Key:   key,
-		UUID:  sessionID,
-		Value: url,
+		Key:       key,
+		UUID:      sessionID,
+		Value:     url,
+		IsDeleted: false,
 	}
 	fs.urls[key] = row
 	if err := fs.storage.InsertFS(row); err != nil {
@@ -210,7 +223,21 @@ func (fs *FileStorage) SetBatchURL(ctx context.Context, urlBatch []string, sessi
 }
 
 func (fs *FileStorage) UpdateBatchURL(ctx context.Context, task workers.DeleteTask) error {
-	return errors.New("file storage invalid method")
+	for _, key := range task.Keys {
+		row, ok := fs.urls[key]
+		if !ok {
+			continue
+		}
+		if row.UUID != task.UUID {
+			continue
+		}
+		row.IsDeleted = true
+		fs.urls[key] = row
+		if err := fs.storage.InsertFS(row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (fs *FileStorage) Ping(ctx context.Context) error {
