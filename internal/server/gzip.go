@@ -29,12 +29,14 @@ func compressMiddleware() gin.HandlerFunc {
 			ctx.Next()
 			return
 		}
+
 		gz, err := gzip.NewWriterLevel(ctx.Writer, gzip.BestCompression)
 		if err != nil {
 			io.WriteString(ctx.Writer, err.Error())
 			return
 		}
 		defer gz.Close()
+
 		ctx.Writer.Header().Set("Content-Encoding", "gzip")
 		ctx.Writer = &gzipWriter{ctx.Writer, gz}
 		ctx.Next()
@@ -47,11 +49,13 @@ func decompressMiddleware() gin.HandlerFunc {
 			ctx.Next()
 			return
 		}
+
 		gz, err := gzip.NewReader(ctx.Request.Body)
 		if err != nil {
 			http.Error(ctx.Writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		ctx.Request.Body = gz
 		ctx.Next()
 	}

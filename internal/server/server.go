@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/avtorsky/cuttlink/internal/storage"
+	"github.com/avtorsky/cuttlink/internal/workers"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,7 +43,7 @@ type Server struct {
 	storage     storage.Storager
 	serverHost  string
 	serviceHost string
-	pingTimeout time.Duration
+	deleteCh chan workers.DeleteTask
 }
 
 type ServerOption func(*Server) error
@@ -66,20 +66,27 @@ func New(storage storage.Storager, opts ...ServerOption) (Server, error) {
 	const (
 		defaultServerHost  = ":8080"
 		defaultServiceHost = "http://localhost:8080"
-		defaultPingTimeout = 1000 * time.Millisecond
 	)
+
+	ctx := context.Background()
+	deleteTasks := make(chan workers.DeleteTask, 10)
+	deleteService := workers.NewWorker(storage, deleteTasks)
+	go deleteService.RunWorker(ctx)
+
 	s := Server{
 		srv:         nil,
 		storage:     storage,
 		serverHost:  defaultServerHost,
 		serviceHost: defaultServiceHost,
-		pingTimeout: 500 * time.Millisecond,
+		deleteCh:    deleteTasks,
 	}
+
 	for _, opt := range opts {
 		if err := opt(&s); err != nil {
 			return Server{}, err
 		}
 	}
+
 	gin.ForceConsoleColor()
 	r := gin.New()
 	r.Use(
@@ -95,11 +102,14 @@ func New(storage storage.Storager, opts ...ServerOption) (Server, error) {
 	r.POST("/api/shorten", s.createShortURLJSON)
 	r.POST("/api/shorten/batch", s.createShortURLBatch)
 	r.GET("/api/user/urls", s.getUserURLs)
+	r.DELETE("/api/user/urls", s.deleteUserURLs)
 	r.GET("/ping", s.pingDSN)
+
 	srv := http.Server{
 		Addr:    s.serverHost,
 		Handler: r,
 	}
+
 	s.srv = &srv
 	return s, nil
 }
@@ -114,6 +124,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 	if err != nil {
 		return
 	}
+
 	var baseURL string
 	switch headerContentType {
 	case "application/x-gzip", "text/plain; charset=utf-8":
@@ -127,6 +138,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusInternalServerError, "Invalid Content-Type header")
 		return
 	}
+
 	u, _ := url.Parse(baseURL)
 	if u.Scheme == "" {
 		ctx.String(http.StatusBadRequest, "Invalid URL scheme")
@@ -135,6 +147,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
+
 	key, err := s.storage.SetURL(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.Writer.Header().Set("Content-Type", "text/plain")
@@ -147,6 +160,7 @@ func (s *Server) createShortURL(ctx *gin.Context) {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
 	}
+
 	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
 	ctx.Writer.Header().Set("Content-Type", "text/plain")
 	ctx.String(http.StatusCreated, shortURL)
@@ -158,6 +172,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 	if err != nil {
 		return
 	}
+
 	var baseURL string
 	switch headerContentType {
 	case "application/x-gzip":
@@ -173,6 +188,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusInternalServerError, "Invalid Content-Type header")
 		return
 	}
+
 	if baseURL == "" {
 		ctx.String(http.StatusBadRequest, "Invalid URL")
 		return
@@ -185,6 +201,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid URL host")
 		return
 	}
+
 	key, err := s.storage.SetURL(ctx.Request.Context(), baseURL, sessionID)
 	if err != nil {
 		ctx.Writer.Header().Set("Content-Type", "application/x-www-form-urlencoded")
@@ -197,6 +214,7 @@ func (s *Server) createShortURLWebForm(ctx *gin.Context) {
 		ctx.String(http.StatusInternalServerError, "Internal server I/O error")
 		return
 	}
+
 	shortURL := fmt.Sprintf("%s/%s", s.serviceHost, key)
 	ctx.Writer.Header().Set("Content-Type", "application/x-www-form-urlencoded")
 	ctx.String(http.StatusCreated, shortURL)
@@ -208,6 +226,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 	if err != nil {
 		return
 	}
+
 	var payload PayloadJSON
 	if headerContentType != "application/json" {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -234,6 +253,7 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 		})
 		return
 	}
+
 	key, err := s.storage.SetURL(ctx.Request.Context(), payload.URL, sessionID)
 	if err != nil {
 		ctx.Writer.Header().Set("Content-Type", "application/json")
@@ -250,11 +270,13 @@ func (s *Server) createShortURLJSON(ctx *gin.Context) {
 		})
 		return
 	}
+
 	shortURL := ResponseJSON{
 		Result: fmt.Sprintf("%s/%s", s.serviceHost, key),
 	}
 	ctx.Writer.Header().Set("Content-Type", "application/json")
 	ctx.JSON(http.StatusCreated, shortURL)
+
 	result, err := json.Marshal(shortURL)
 	if err != nil {
 		panic(err)
@@ -274,6 +296,7 @@ func (s *Server) createShortURLBatch(ctx *gin.Context) {
 		})
 		return
 	}
+
 	request := make([]URLPairRequest, 0)
 	if err := ctx.BindJSON(&request); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -299,6 +322,7 @@ func (s *Server) createShortURLBatch(ctx *gin.Context) {
 		}
 		urlBatch[i] = request[i].OriginalURL
 	}
+
 	urlBatch, err = s.storage.SetBatchURL(ctx.Request.Context(), urlBatch, sessionID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -306,6 +330,7 @@ func (s *Server) createShortURLBatch(ctx *gin.Context) {
 		})
 		return
 	}
+
 	response := make([]URLPairResponse, size)
 	for i := range request {
 		response[i] = URLPairResponse{
@@ -327,7 +352,14 @@ func (s *Server) redirect(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "Invalid key")
 		return
 	}
-	ctx.Redirect(http.StatusTemporaryRedirect, baseURL)
+
+	if baseURL.IsDeleted {
+		ctx.AbortWithStatus(http.StatusGone)
+		return
+	} else {
+		ctx.Redirect(http.StatusTemporaryRedirect, baseURL.Value)
+		return
+	}
 }
 
 func (s *Server) getUserURLs(ctx *gin.Context) {
@@ -335,6 +367,7 @@ func (s *Server) getUserURLs(ctx *gin.Context) {
 	if err != nil {
 		return
 	}
+
 	urlMap, err := s.storage.GetUserURLs(ctx.Request.Context(), sessionID)
 	result := make([]URLPair, len(urlMap))
 	if len(result) < 1 || err != nil {
@@ -353,11 +386,27 @@ func (s *Server) getUserURLs(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, result)
 }
 
+func (s *Server) deleteUserURLs(ctx *gin.Context) {
+	sessionID, err := getUUID(ctx)
+	if err != nil {
+		return
+	}
+
+	var keys []string
+	if err := json.NewDecoder(ctx.Request.Body).Decode(&keys); err != nil {
+		ctx.String(http.StatusBadRequest, "URL keys parse error")
+		return
+	}
+	s.deleteCh <- workers.DeleteTask{
+		Keys: keys,
+		UUID: sessionID,
+	}
+	ctx.Status(http.StatusAccepted)
+}
+
 func (s *Server) pingDSN(ctx *gin.Context) {
 	ctx.Writer.Header().Set("Content-Type", "text/plain")
-	ctxTimeout, cancel := context.WithTimeout(ctx.Request.Context(), time.Duration(s.pingTimeout))
-	defer cancel()
-	err := s.storage.Ping(ctxTimeout)
+	err := s.storage.Ping(ctx)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "DSN out of service timeout")
 		return

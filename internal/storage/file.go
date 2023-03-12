@@ -18,6 +18,7 @@ func NewFile(filename string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &File{
 		file:     file,
 		filename: filename,
@@ -33,10 +34,12 @@ func (f *File) LoadFS() ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	scanner := bufio.NewScanner(file)
 	buf := make([]byte, bufMaxBytes)
 	scanner.Buffer(buf, bufMaxBytes)
 	data := make([]Row, 0)
+	
 	for scanner.Scan() {
 		rawRow := scanner.Bytes()
 		var row Row
@@ -51,6 +54,7 @@ func (f *File) LoadFS() ([]Row, error) {
 	if err := file.Close(); err != nil {
 		return nil, err
 	}
+
 	return data, nil
 }
 
@@ -59,6 +63,7 @@ func (f *File) InsertFS(value Row) error {
 	if err != nil {
 		return err
 	}
+
 	data = append(data, '\n')
 	_, err = f.file.Write(data)
 	if err != nil {
@@ -68,5 +73,6 @@ func (f *File) InsertFS(value Row) error {
 	if err != nil {
 		return err
 	}
+	
 	return nil
 }

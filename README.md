@@ -77,6 +77,9 @@ Location: https://explorer.avtorskydeployed.online/
 
 ## Changelog
 
+Release 20230311:
+* feat(./internal/server): sprint4 iter14 async deleteUserURLs handler for batch removals
+
 Release 20230228:
 * feat(./internal/storage): sprint3 iter13 PostgreSQL unique constraint handling
 

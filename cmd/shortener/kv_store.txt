@@ -1,2 +1,2 @@
-{"Key":"2","UUID":"b7861ffb-ee66-4fbe-be96-96231a1ab226","Value":"https://yatube.avtorskydeployed.online/"}
-{"Key":"3","UUID":"1ec942d4-4f32-4257-82c4-b8058152a347","Value":"https://explorer.avtorskydeployed.online/"}
+{"Key":"2","UUID":"11d44d10-5850-41e3-bf0e-dc990b960e12","Value":"https://yatube.avtorskydeployed.online/","IsDeleted":false}
+{"Key":"3","UUID":"11d44d10-5850-41e3-bf0e-dc990b960e12","Value":"https://explorer.avtorskydeployed.online/","IsDeleted":true}
