@@ -43,7 +43,7 @@ type Server struct {
 	storage     storage.Storager
 	serverHost  string
 	serviceHost string
-	deleteCh chan workers.DeleteTask
+	removalCh   chan workers.RemovalTask
 }
 
 type ServerOption func(*Server) error
@@ -69,16 +69,16 @@ func New(storage storage.Storager, opts ...ServerOption) (Server, error) {
 	)
 
 	ctx := context.Background()
-	deleteTasks := make(chan workers.DeleteTask, 10)
-	deleteService := workers.NewWorker(storage, deleteTasks)
-	go deleteService.RunWorker(ctx)
+	removalTasks := make(chan workers.RemovalTask, 10)
+	removalWorker := workers.New(storage, removalTasks)
+	go removalWorker.Run(ctx)
 
 	s := Server{
 		srv:         nil,
 		storage:     storage,
 		serverHost:  defaultServerHost,
 		serviceHost: defaultServiceHost,
-		deleteCh:    deleteTasks,
+		removalCh:   removalTasks,
 	}
 
 	for _, opt := range opts {
@@ -356,10 +356,8 @@ func (s *Server) redirect(ctx *gin.Context) {
 	if baseURL.IsDeleted {
 		ctx.AbortWithStatus(http.StatusGone)
 		return
-	} else {
-		ctx.Redirect(http.StatusTemporaryRedirect, baseURL.Value)
-		return
 	}
+	ctx.Redirect(http.StatusTemporaryRedirect, baseURL.Value)
 }
 
 func (s *Server) getUserURLs(ctx *gin.Context) {
@@ -397,7 +395,7 @@ func (s *Server) deleteUserURLs(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "URL keys parse error")
 		return
 	}
-	s.deleteCh <- workers.DeleteTask{
+	s.removalCh <- workers.RemovalTask{
 		Keys: keys,
 		UUID: sessionID,
 	}

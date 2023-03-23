@@ -32,7 +32,7 @@ type Storager interface {
 	GetUserURLs(ctx context.Context, sessionID string) (map[string]string, error)
 	SetURL(ctx context.Context, url string, sessionID string) (string, error)
 	SetBatchURL(ctx context.Context, urlBatch []string, sessionID string) ([]string, error)
-	UpdateBatchURL(ctx context.Context, task workers.DeleteTask) error
+	UpdateBatchURL(ctx context.Context, task workers.RemovalTask) error
 	Ping(ctx context.Context) error
 	Close() error
 }
@@ -148,11 +148,11 @@ func (ms *InMemoryStorage) SetBatchURL(ctx context.Context, urlBatch []string, s
 	return nil, errors.New("in-memory storage invalid method")
 }
 
-func (ms *InMemoryStorage) UpdateBatchURL(ctx context.Context, task workers.DeleteTask) error {
+func (ms *InMemoryStorage) UpdateBatchURL(ctx context.Context, task workers.RemovalTask) error {
 	for _, key := range task.Keys {
 		row, ok := ms.urls[key]
 		if !ok {
-			continue
+			return errors.New("invalid key")
 		}
 		if row.UUID != task.UUID {
 			continue
@@ -222,11 +222,11 @@ func (fs *FileStorage) SetBatchURL(ctx context.Context, urlBatch []string, sessi
 	return nil, errors.New("file storage invalid method")
 }
 
-func (fs *FileStorage) UpdateBatchURL(ctx context.Context, task workers.DeleteTask) error {
+func (fs *FileStorage) UpdateBatchURL(ctx context.Context, task workers.RemovalTask) error {
 	for _, key := range task.Keys {
 		row, ok := fs.urls[key]
 		if !ok {
-			continue
+			return errors.New("invalid key")
 		}
 		if row.UUID != task.UUID {
 			continue
@@ -353,7 +353,7 @@ func (db *DB) SetBatchURL(ctx context.Context, urlBatch []string, sessionID stri
 	return result, nil
 }
 
-func (db *DB) UpdateBatchURL(ctx context.Context, task workers.DeleteTask) error {
+func (db *DB) UpdateBatchURL(ctx context.Context, task workers.RemovalTask) error {
 	ctxDB, cancel := context.WithTimeout(ctx, dbResponseTimeout)
 	defer cancel()
 
