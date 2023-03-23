@@ -26,14 +26,14 @@ func New(worker Remover, tasks <-chan RemovalTask) *RemovalWorker {
 	}
 }
 
-func (w *RemovalWorker) Run(ctx context.Context) error {
+func (w *RemovalWorker) Run(ctx context.Context) {
 	wg := sync.WaitGroup{}
 
 	for {
 		select {
 		case <-ctx.Done():
 			wg.Wait()
-			return ctx.Err()
+			return
 
 		case task := <-w.Tasks:
 			wg.Add(1)
